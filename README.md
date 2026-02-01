@@ -179,12 +179,13 @@ cargo build --release
 
 #### 使用 Docker Compose（最简单）
 
-1. 创建配置目录并准备配置文件：
+1. 进入配置目录并准备配置文件：
 ```bash
-mkdir -p config
-cp config.example.json config/config.json
-# 编辑 config/config.json 填入你的配置（注意 host 改成 0.0.0.0）
-# 创建 config/credentials.json 填入凭据
+cd config
+cp config.example.json config.json
+cp credentials.example.social.json credentials.json  # 或使用 idc/multiple 版本
+# 编辑 config.json 和 credentials.json 填入你的配置
+cd ..
 ```
 
 2. 启动服务：
@@ -227,10 +228,18 @@ docker run -d \
 
 ```
 config/
-├── config.json        # 主配置文件（必需）
-├── credentials.json   # 凭据文件（必需，程序会自动更新 token）
-├── pools.json         # 池配置文件（可选，可通过 Admin UI 创建管理）
-└── api_keys.json      # API Key 配置文件（可选，可通过 Admin UI 创建管理）
+├── config.example.json              # 主配置示例
+├── credentials.example.social.json  # Social 认证凭据示例
+├── credentials.example.idc.json     # IdC 认证凭据示例
+├── credentials.example.multiple.json # 多凭据格式示例
+├── pools.example.json               # 池配置示例
+├── api_keys.example.json            # API Key 配置示例
+├── README.md                        # 配置说明文档
+│
+├── config.json        # ← 你需要创建（从示例复制）
+├── credentials.json   # ← 你需要创建（从示例复制）
+├── pools.json         # ← 可选，可通过 Admin UI 创建
+└── api_keys.json      # ← 可选，可通过 Admin UI 创建
 ```
 
 > **重要说明**：

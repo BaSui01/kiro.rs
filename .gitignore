@@ -17,3 +17,9 @@
 /.claude
 /.cargo
 .ace-tool/
+
+# Docker 配置目录 - 忽略运行时配置，保留示例文件
+/config/config.json
+/config/credentials.json
+/config/pools.json
+/config/api_keys.json
