@@ -1,15 +1,31 @@
 //! Admin API HTTP 处理器
+//!
+//! 提供凭据管理相关的 HTTP 处理器
 
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
     response::IntoResponse,
 };
 
 use super::{
     middleware::AdminState,
-    types::{AddCredentialRequest, SetDisabledRequest, SetPriorityRequest, SuccessResponse},
+    types::{
+        AddCredentialRequest, AdminErrorResponse, CsrfTokenResponse, ImportCredentialsRequest,
+        SetDisabledRequest, SetPriorityRequest, SetSchedulingModeRequest, SuccessResponse,
+    },
 };
+
+/// GET /api/admin/csrf-token
+/// 获取新的 CSRF Token
+pub async fn get_csrf_token(State(state): State<AdminState>) -> impl IntoResponse {
+    // 清理过期的 Token
+    state.csrf_manager.cleanup_expired();
+
+    let token = state.csrf_manager.generate_token();
+    Json(CsrfTokenResponse { token })
+}
 
 /// GET /api/admin/credentials
 /// 获取所有凭据状态
@@ -101,4 +117,38 @@ pub async fn delete_credential(
         Ok(_) => Json(SuccessResponse::new(format!("凭据 #{} 已删除", id))).into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
+}
+
+/// POST /api/admin/credentials/import
+/// 批量导入凭据（支持 IdC 格式）
+pub async fn import_credentials(
+    State(state): State<AdminState>,
+    Json(payload): Json<ImportCredentialsRequest>,
+) -> impl IntoResponse {
+    if payload.credentials.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(AdminErrorResponse::invalid_request("凭据列表不能为空")),
+        )
+            .into_response();
+    }
+
+    match state.service.import_credentials(payload.credentials, payload.pool_id).await {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// POST /api/admin/scheduling-mode
+/// 设置调度模式
+pub async fn set_scheduling_mode(
+    State(state): State<AdminState>,
+    Json(payload): Json<SetSchedulingModeRequest>,
+) -> impl IntoResponse {
+    state.service.set_scheduling_mode(payload.mode);
+    let mode_name = match payload.mode {
+        crate::kiro::token_manager::SchedulingMode::RoundRobin => "轮询模式",
+        crate::kiro::token_manager::SchedulingMode::PriorityFill => "优先填充模式",
+    };
+    Json(SuccessResponse::new(format!("调度模式已切换为: {}", mode_name)))
 }
