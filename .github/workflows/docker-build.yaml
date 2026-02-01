@@ -11,6 +11,10 @@ on:
         required: true
         default: '2026.1.1'
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 permissions:
   contents: read
   packages: write
@@ -34,13 +38,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set lower case image name
+        run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
@@ -53,7 +60,7 @@ jobs:
           cache-to: type=gha,mode=max
           push: true
           provenance: false
-          tags: ghcr.io/${{ github.repository_owner }}/kiro-rs:${{ github.event.inputs.version || github.ref_name }}-${{ matrix.arch }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ github.event.inputs.version || github.ref_name }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=Kiro.rs Docker Image
@@ -62,6 +69,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Set lower case image name
+        run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> $GITHUB_ENV
+        env:
+          IMAGE_NAME: ${{ github.repository }}
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -72,7 +84,7 @@ jobs:
       - name: Create and push multi-arch manifest
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          IMAGE="ghcr.io/${{ github.repository_owner }}/kiro-rs"
+          IMAGE="ghcr.io/${IMAGE_NAME_LC}"
 
           # Create manifest for version tag
           docker manifest create ${IMAGE}:${VERSION} \
