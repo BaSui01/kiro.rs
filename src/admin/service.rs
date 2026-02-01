@@ -245,6 +245,7 @@ impl AdminService {
     }
 
     /// 获取当前调度模式
+    #[allow(dead_code)]
     pub fn get_scheduling_mode(&self) -> SchedulingMode {
         self.token_manager.get_scheduling_mode()
     }

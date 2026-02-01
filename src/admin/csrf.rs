@@ -102,6 +102,7 @@ impl CsrfManager {
     }
 
     /// 获取当前 Token 数量（用于监控）
+    #[allow(dead_code)]
     pub fn token_count(&self) -> usize {
         self.tokens.read().len()
     }

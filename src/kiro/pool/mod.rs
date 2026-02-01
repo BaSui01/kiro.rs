@@ -170,11 +170,13 @@ impl PoolsConfig {
     }
 
     /// 获取池（按 ID）
+    #[allow(dead_code)]
     pub fn get(&self, pool_id: &str) -> Option<&Pool> {
         self.pools.iter().find(|p| p.id == pool_id)
     }
 
     /// 获取可变池（按 ID）
+    #[allow(dead_code)]
     pub fn get_mut(&mut self, pool_id: &str) -> Option<&mut Pool> {
         self.pools.iter_mut().find(|p| p.id == pool_id)
     }
@@ -191,6 +193,7 @@ impl Default for PoolsConfig {
 /// 池快照（用于 Admin API）
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct PoolSnapshot {
     /// 池 ID
     pub id: String,

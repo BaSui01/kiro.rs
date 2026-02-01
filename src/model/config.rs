@@ -34,9 +34,6 @@ pub struct Config {
     #[serde(default)]
     pub machine_id: Option<String>,
 
-    #[serde(default)]
-    pub api_key: Option<String>,
-
     #[serde(default = "default_system_version")]
     pub system_version: String,
 
@@ -133,7 +130,6 @@ impl Default for Config {
             region: default_region(),
             kiro_version: default_kiro_version(),
             machine_id: None,
-            api_key: None,
             system_version: default_system_version(),
             node_version: default_node_version(),
             tls_backend: default_tls_backend(),
@@ -153,7 +149,7 @@ impl Default for Config {
 impl Config {
     /// 获取默认配置文件路径
     pub fn default_config_path() -> &'static str {
-        "config.json"
+        "config/config.json"
     }
 
     /// 从文件加载配置
@@ -179,7 +175,6 @@ impl Config {
     /// 验证配置有效性
     ///
     /// 检查必填字段和格式是否正确
-    /// 注意：apiKey 不是启动必须的，可以后续通过前端配置
     pub fn validate(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
@@ -196,12 +191,6 @@ impl Config {
         // 检查 region
         if self.region.trim().is_empty() {
             errors.push("region 不能为空".to_string());
-        }
-
-        // apiKey 不是启动必须的，可以后续通过前端配置
-        // 只在配置了但为空时警告
-        if self.api_key.as_ref().is_some_and(|k| k.trim().is_empty()) {
-            errors.push("apiKey 配置为空字符串，请移除或填写有效值".to_string());
         }
 
         // 检查代理 URL 格式

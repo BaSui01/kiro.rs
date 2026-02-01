@@ -30,6 +30,11 @@ async fn main() {
         )
         .init();
 
+    // 确保 config 目录存在
+    if let Err(e) = std::fs::create_dir_all("config") {
+        tracing::warn!("创建 config 目录失败: {}", e);
+    }
+
     // 加载配置
     let config_path = args
         .config
@@ -48,32 +53,24 @@ async fn main() {
         std::process::exit(1);
     }
 
-    // 加载凭证（支持单对象或数组格式，文件不存在时使用空列表）
+    // 加载凭证（仅支持数组格式，文件不存在时使用空列表）
     let credentials_path = args
         .credentials
         .unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
-    let (credentials_list, is_multiple_format) =
-        match CredentialsConfig::load(&credentials_path) {
-            Ok(credentials_config) => {
-                let is_multiple = credentials_config.is_multiple();
-                let list = credentials_config.into_sorted_credentials();
-                (list, is_multiple)
-            }
-            Err(e) => {
-                // 凭证文件不存在或解析失败，使用空列表（可以后续通过前端添加）
-                tracing::warn!("加载凭证失败: {}，将以空凭证启动", e);
-                tracing::warn!("可以通过 Admin UI 添加凭证");
-                (Vec::new(), true)
-            }
-        };
+    let credentials_list = match CredentialsConfig::load(&credentials_path) {
+        Ok(credentials_config) => credentials_config.into_sorted_credentials(),
+        Err(e) => {
+            // 凭证文件不存在或解析失败，使用空列表（可以后续通过前端添加）
+            tracing::warn!("加载凭证失败: {}，将以空凭证启动", e);
+            tracing::warn!("可以通过 Admin UI 添加凭证");
+            Vec::new()
+        }
+    };
 
     tracing::info!("已加载 {} 个凭据配置", credentials_list.len());
 
     // 获取第一个凭据用于日志显示
     let first_credentials = credentials_list.first().cloned().unwrap_or_default();
-
-    // 获取 API Key（可选，未配置时 API 端点不可用）
-    let api_key = config.api_key.clone();
 
     // 构建代理配置
     let proxy_config = config.proxy_url.as_ref().map(|url| {
@@ -95,7 +92,6 @@ async fn main() {
         credentials_list,
         proxy_config.clone(),
         Some(credentials_path_buf.clone()),
-        is_multiple_format,
     )
     .unwrap_or_else(|e| {
         tracing::error!("创建 Token 管理器失败: {}", e);
@@ -120,63 +116,48 @@ async fn main() {
         .map(|k| !k.trim().is_empty())
         .unwrap_or(false);
 
-    // 准备 ApiKeyManager 和 PoolManager（如果 Admin API 启用）
-    let (api_key_manager, pool_manager) = if admin_key_valid {
-        // 获取配置目录
-        let config_dir = std::path::Path::new(&config_path)
-            .parent()
-            .unwrap_or(std::path::Path::new("."));
+    // 获取配置目录
+    let config_dir = std::path::Path::new(&config_path)
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
 
-        // 创建 API Key 管理器
-        let api_keys_path = config_dir.join("api_keys.json");
-        let api_key_manager =
-            Arc::new(admin::ApiKeyManager::new(&api_keys_path).unwrap_or_else(|e| {
-                tracing::error!("创建 API Key 管理器失败: {}", e);
-                std::process::exit(1);
-            }));
+    // 创建 API Key 管理器（必需，用于 API 认证）
+    let api_keys_path = config_dir.join("api_keys.json");
+    let api_key_manager =
+        Arc::new(admin::ApiKeyManager::new(&api_keys_path).unwrap_or_else(|e| {
+            tracing::error!("创建 API Key 管理器失败: {}", e);
+            std::process::exit(1);
+        }));
 
-        // 创建池管理器（可选）
-        let pools_path = config_dir.join("pools.json");
-        let pool_manager = match PoolManager::new(
-            config.clone(),
-            proxy_config.clone(),
-            &pools_path,
-            &credentials_path_buf,
-        ) {
-            Ok(pm) => {
-                let pool_count = pm.pool_count();
-                tracing::info!("池管理器已初始化，共 {} 个池", pool_count);
-                Some(Arc::new(pm))
-            }
-            Err(e) => {
-                tracing::warn!("池管理器初始化失败: {}，池管理功能不可用", e);
-                None
-            }
-        };
-
-        (Some(api_key_manager), pool_manager)
-    } else {
-        (None, None)
+    // 创建池管理器（可选）
+    let pools_path = config_dir.join("pools.json");
+    let pool_manager = match PoolManager::new(
+        config.clone(),
+        proxy_config.clone(),
+        &pools_path,
+        &credentials_path_buf,
+    ) {
+        Ok(pm) => {
+            let pool_count = pm.pool_count();
+            tracing::info!("池管理器已初始化，共 {} 个池", pool_count);
+            Some(Arc::new(pm))
+        }
+        Err(e) => {
+            tracing::warn!("池管理器初始化失败: {}，池管理功能不可用", e);
+            None
+        }
     };
 
-    // 构建 Anthropic API 路由（apiKey 可选）
-    let anthropic_app = if let Some(ref key) = api_key {
-        let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
-        anthropic::create_router_full(
-            key,
-            Some(kiro_provider),
-            first_credentials.profile_arn.clone(),
-            api_key_manager.clone(),
-            pool_manager.clone(),
-        )
-    } else {
-        tracing::warn!("apiKey 未配置，Anthropic API 端点不可用");
-        tracing::warn!("请通过 Admin UI 配置 apiKey");
-        // 创建一个空路由，只有 Admin API 可用
-        axum::Router::new()
-    };
+    // 构建 Anthropic API 路由
+    let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
+    let anthropic_app = anthropic::create_router(
+        api_key_manager.clone(),
+        Some(kiro_provider),
+        first_credentials.profile_arn.clone(),
+        pool_manager.clone(),
+    );
 
-    let app = if let Some(admin_key) = &config.admin_api_key {
+    let app: axum::Router = if let Some(admin_key) = &config.admin_api_key {
         if admin_key.trim().is_empty() {
             tracing::warn!("admin_api_key 配置为空，Admin API 未启用");
             anthropic_app
@@ -187,7 +168,7 @@ async fn main() {
                 admin_service,
                 config.clone(),
                 &config_path,
-                api_key_manager.as_ref().unwrap().clone(),
+                api_key_manager.clone(),
             );
 
             // 如果池管理器初始化成功，添加到 AdminState
@@ -217,14 +198,11 @@ async fn main() {
     // 启动服务器
     let addr = format!("{}:{}", config.host, config.port);
     tracing::info!("启动服务: {}", addr);
-
-    if let Some(ref key) = api_key {
-        tracing::info!("API Key: {}***", &key[..(key.len() / 2).min(8)]);
-        tracing::info!("可用 API:");
-        tracing::info!("  GET  /v1/models");
-        tracing::info!("  POST /v1/messages");
-        tracing::info!("  POST /v1/messages/count_tokens");
-    }
+    tracing::info!("API Key 认证已启用（api_keys.json）");
+    tracing::info!("可用 API:");
+    tracing::info!("  GET  /v1/models");
+    tracing::info!("  POST /v1/messages");
+    tracing::info!("  POST /v1/messages/count_tokens");
 
     if admin_key_valid {
         tracing::info!("Admin API:");

@@ -90,39 +90,32 @@ fn canonicalize_auth_method_value(value: &str) -> &str {
     }
 }
 
-/// 凭据配置（支持单对象或数组格式）
+/// 凭据配置（仅支持数组格式）
 ///
-/// 自动识别配置文件格式：
-/// - 单对象格式（旧格式，向后兼容）
-/// - 数组格式（新格式，支持多凭据）
+/// 配置文件必须为 JSON 数组格式，支持多凭据管理
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum CredentialsConfig {
-    /// 单个凭据（旧格式）
-    Single(KiroCredentials),
-    /// 多凭据数组（新格式）
-    Multiple(Vec<KiroCredentials>),
-}
+#[serde(transparent)]
+pub struct CredentialsConfig(Vec<KiroCredentials>);
 
 impl CredentialsConfig {
     /// 从文件加载凭据配置
     ///
     /// - 如果文件不存在，返回空数组
     /// - 如果文件内容为空，返回空数组
-    /// - 支持单对象或数组格式
+    /// - 仅支持数组格式
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
 
         // 文件不存在时返回空数组
         if !path.exists() {
-            return Ok(CredentialsConfig::Multiple(vec![]));
+            return Ok(CredentialsConfig(vec![]));
         }
 
         let content = fs::read_to_string(path)?;
 
         // 文件为空时返回空数组
         if content.trim().is_empty() {
-            return Ok(CredentialsConfig::Multiple(vec![]));
+            return Ok(CredentialsConfig(vec![]));
         }
 
         let config = serde_json::from_str(&content)?;
@@ -131,50 +124,32 @@ impl CredentialsConfig {
 
     /// 转换为按优先级排序的凭据列表
     pub fn into_sorted_credentials(self) -> Vec<KiroCredentials> {
-        match self {
-            CredentialsConfig::Single(mut cred) => {
-                cred.canonicalize_auth_method();
-                vec![cred]
-            }
-            CredentialsConfig::Multiple(mut creds) => {
-                // 按优先级排序（数字越小优先级越高）
-                creds.sort_by_key(|c| c.priority);
-                for cred in &mut creds {
-                    cred.canonicalize_auth_method();
-                }
-                creds
-            }
+        let mut creds = self.0;
+        // 按优先级排序（数字越小优先级越高）
+        creds.sort_by_key(|c| c.priority);
+        for cred in &mut creds {
+            cred.canonicalize_auth_method();
         }
+        creds
     }
 
     /// 获取凭据数量
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
-        match self {
-            CredentialsConfig::Single(_) => 1,
-            CredentialsConfig::Multiple(creds) => creds.len(),
-        }
+        self.0.len()
     }
 
     /// 判断是否为空
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
-        match self {
-            CredentialsConfig::Single(_) => false,
-            CredentialsConfig::Multiple(creds) => creds.is_empty(),
-        }
-    }
-
-    /// 判断是否为多凭据格式（数组格式）
-    pub fn is_multiple(&self) -> bool {
-        matches!(self, CredentialsConfig::Multiple(_))
+        self.0.is_empty()
     }
 }
 
 impl KiroCredentials {
     /// 获取默认凭证文件路径
     pub fn default_credentials_path() -> &'static str {
-        "credentials.json"
+        "config/credentials.json"
     }
 
     /// 从 JSON 字符串解析凭证
@@ -278,7 +253,7 @@ mod tests {
     fn test_default_credentials_path() {
         assert_eq!(
             KiroCredentials::default_credentials_path(),
-            "credentials.json"
+            "config/credentials.json"
         );
     }
 
@@ -297,21 +272,12 @@ mod tests {
     }
 
     #[test]
-    fn test_credentials_config_single() {
-        let json = r#"{"refreshToken": "test", "expiresAt": "2025-12-31T00:00:00Z"}"#;
-        let config: CredentialsConfig = serde_json::from_str(json).unwrap();
-        assert!(matches!(config, CredentialsConfig::Single(_)));
-        assert_eq!(config.len(), 1);
-    }
-
-    #[test]
     fn test_credentials_config_multiple() {
         let json = r#"[
             {"refreshToken": "test1", "priority": 1},
             {"refreshToken": "test2", "priority": 0}
         ]"#;
         let config: CredentialsConfig = serde_json::from_str(json).unwrap();
-        assert!(matches!(config, CredentialsConfig::Multiple(_)));
         assert_eq!(config.len(), 2);
     }
 

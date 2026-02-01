@@ -1,10 +1,15 @@
 {
   "host": "127.0.0.1",
   "port": 8990,
-  "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
-  "tlsBackend": "rustls",
   "region": "us-east-1",
+  "tlsBackend": "rustls",
   "adminApiKey": "sk-admin-your-secret-key",
-  "sessionCacheMaxCapacity": 1000,
-  "sessionCacheTtlSecs": 3600
+  "sessionCacheMaxCapacity": 10000,
+  "sessionCacheTtlSecs": 3600,
+  "proxyUrl": null,
+  "proxyUsername": null,
+  "proxyPassword": null,
+  "countTokensApiUrl": null,
+  "countTokensApiKey": null,
+  "countTokensAuthType": "x-api-key"
 }

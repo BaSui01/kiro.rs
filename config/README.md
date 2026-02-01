@@ -28,11 +28,11 @@
    ```bash
    cp config.example.json config.json
    cp credentials.example.social.json credentials.json  # 或使用 idc/multiple 版本
+   cp api_keys.example.json api_keys.json  # 可选，用于 API Key 认证
    ```
 
 2. 编辑 `config.json`，修改以下字段：
    - `host`: Docker 部署时改为 `"0.0.0.0"`
-   - `apiKey`: 你的 API Key（用于客户端认证）
    - `adminApiKey`: Admin API 密钥（用于访问管理后台）
 
 3. 编辑 `credentials.json`，填入你的凭据：
@@ -40,16 +40,38 @@
    - `expiresAt`: 过期时间（如果不确定，填一个过去的时间让程序自动刷新）
    - `authMethod`: 认证方式（`social` 或 `idc`）
 
-4. 启动服务：
+4. （可选）编辑 `api_keys.json`，配置 API Key 认证：
+   - 用于客户端调用 API 时的认证
+   - 也可以通过 Admin UI 动态管理
+
+5. 启动服务：
    ```bash
    cd ..  # 回到项目根目录
    docker-compose up -d
    ```
 
-5. 访问 Admin UI：
+6. 访问 Admin UI：
    ```
    http://localhost:8990/admin
    ```
+
+## config.json 配置项说明
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `host` | string | `"127.0.0.1"` | 监听地址，Docker 部署时设为 `"0.0.0.0"` |
+| `port` | number | `8080` | 监听端口 |
+| `region` | string | `"us-east-1"` | AWS 区域 |
+| `tlsBackend` | string | `"rustls"` | TLS 后端：`"rustls"` 或 `"native-tls"` |
+| `adminApiKey` | string | `null` | Admin API 密钥，设置后启用管理后台 |
+| `sessionCacheMaxCapacity` | number | `10000` | 会话缓存最大容量 |
+| `sessionCacheTtlSecs` | number | `3600` | 会话缓存 TTL（秒） |
+| `proxyUrl` | string | `null` | HTTP 代理地址 |
+| `proxyUsername` | string | `null` | 代理认证用户名 |
+| `proxyPassword` | string | `null` | 代理认证密码 |
+| `countTokensApiUrl` | string | `null` | 外部 count_tokens API 地址 |
+| `countTokensApiKey` | string | `null` | count_tokens API 密钥 |
+| `countTokensAuthType` | string | `"x-api-key"` | count_tokens API 认证类型 |
 
 ## 注意事项
 
