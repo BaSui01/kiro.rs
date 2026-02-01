@@ -183,9 +183,8 @@ cargo build --release
 ```bash
 mkdir -p config
 cp config.example.json config/config.json
-# 编辑 config/config.json 填入你的配置
+# 编辑 config/config.json 填入你的配置（注意 host 改成 0.0.0.0）
 # 创建 config/credentials.json 填入凭据
-# 可选：创建 config/pools.json 和 config/api_keys.json
 ```
 
 2. 启动服务：
@@ -193,12 +192,17 @@ cp config.example.json config/config.json
 docker-compose up -d
 ```
 
-3. 查看日志：
+3. 访问 Admin UI 管理：
+```
+http://localhost:8990/admin
+```
+
+4. 查看日志：
 ```bash
 docker-compose logs -f
 ```
 
-4. 停止服务：
+5. 停止服务：
 ```bash
 docker-compose down
 ```
@@ -224,12 +228,17 @@ docker run -d \
 ```
 config/
 ├── config.json        # 主配置文件（必需）
-├── credentials.json   # 凭据文件（必需）
-├── pools.json         # 池配置文件（可选）
-└── api_keys.json      # API Key 配置文件（可选）
+├── credentials.json   # 凭据文件（必需，程序会自动更新 token）
+├── pools.json         # 池配置文件（可选，可通过 Admin UI 创建管理）
+└── api_keys.json      # API Key 配置文件（可选，可通过 Admin UI 创建管理）
 ```
 
-> **注意**：`pools.json` 和 `api_keys.json` 是可选的。如果不需要凭据池和多 API Key 功能，可以不创建这些文件。
+> **重要说明**：
+> - 程序会自动读写配置目录中的所有文件，所以需要挂载整个目录
+> - `credentials.json` 中的 token 刷新后会自动回写
+> - `pools.json` 和 `api_keys.json` 可以通过 Admin UI 动态创建和管理
+> - Docker 部署时，`config.json` 的 `host` 应设为 `"0.0.0.0"` 以便外部访问
+> - 要启用 Admin UI，必须配置 `adminApiKey` 字段
 
 ### 5. 使用 API
 
