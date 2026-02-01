@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { CredentialStatusItem } from '@/types/api'
+import type { CredentialStatusItem, SchedulingMode } from '@/types/api'
 import {
   useSetDisabled,
   useSetPriority,
@@ -25,6 +25,7 @@ import {
 interface CredentialCardProps {
   credential: CredentialStatusItem
   onViewBalance: (id: number) => void
+  schedulingMode: SchedulingMode
 }
 
 function formatAuthMethodLabel(authMethod: string | null): string {
@@ -33,10 +34,13 @@ function formatAuthMethodLabel(authMethod: string | null): string {
   return authMethod
 }
 
-export function CredentialCard({ credential, onViewBalance }: CredentialCardProps) {
+export function CredentialCard({ credential, onViewBalance, schedulingMode }: CredentialCardProps) {
   const [editingPriority, setEditingPriority] = useState(false)
   const [priorityValue, setPriorityValue] = useState(String(credential.priority))
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  // 是否为优先填充模式（只有这个模式下优先级才有意义）
+  const isPriorityMode = schedulingMode === 'priority_fill'
 
   const setDisabled = useSetDisabled()
   const setPriority = useSetPriority()
@@ -115,12 +119,13 @@ export function CredentialCard({ credential, onViewBalance }: CredentialCardProp
 
   return (
     <>
-      <Card className={credential.isCurrent ? 'ring-2 ring-primary' : ''}>
+      <Card className={isPriorityMode && credential.isCurrent ? 'ring-2 ring-primary' : ''}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               凭据 #{credential.id}
-              {credential.isCurrent && (
+              {/* 只在优先填充模式下显示"当前"标记 */}
+              {isPriorityMode && credential.isCurrent && (
                 <Badge variant="success">当前</Badge>
               )}
               {credential.disabled && (
@@ -140,48 +145,51 @@ export function CredentialCard({ credential, onViewBalance }: CredentialCardProp
         <CardContent className="space-y-4">
           {/* 信息网格 */}
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">优先级：</span>
-              {editingPriority ? (
-                <div className="inline-flex items-center gap-1 ml-1">
-                  <Input
-                    type="number"
-                    value={priorityValue}
-                    onChange={(e) => setPriorityValue(e.target.value)}
-                    className="w-16 h-7 text-sm"
-                    min="0"
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    onClick={handlePriorityChange}
-                    disabled={setPriority.isPending}
+            {/* 只在优先填充模式下显示优先级 */}
+            {isPriorityMode && (
+              <div>
+                <span className="text-muted-foreground">优先级：</span>
+                {editingPriority ? (
+                  <div className="inline-flex items-center gap-1 ml-1">
+                    <Input
+                      type="number"
+                      value={priorityValue}
+                      onChange={(e) => setPriorityValue(e.target.value)}
+                      className="w-16 h-7 text-sm"
+                      min="0"
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={handlePriorityChange}
+                      disabled={setPriority.isPending}
+                    >
+                      ✓
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={() => {
+                        setEditingPriority(false)
+                        setPriorityValue(String(credential.priority))
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ) : (
+                  <span
+                    className="font-medium cursor-pointer hover:underline ml-1"
+                    onClick={() => setEditingPriority(true)}
                   >
-                    ✓
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0"
-                    onClick={() => {
-                      setEditingPriority(false)
-                      setPriorityValue(String(credential.priority))
-                    }}
-                  >
-                    ✕
-                  </Button>
-                </div>
-              ) : (
-                <span
-                  className="font-medium cursor-pointer hover:underline ml-1"
-                  onClick={() => setEditingPriority(true)}
-                >
-                  {credential.priority}
-                  <span className="text-xs text-muted-foreground ml-1">(点击编辑)</span>
-                </span>
-              )}
-            </div>
+                    {credential.priority}
+                    <span className="text-xs text-muted-foreground ml-1">(点击编辑)</span>
+                  </span>
+                )}
+              </div>
+            )}
             <div>
               <span className="text-muted-foreground">失败次数：</span>
               <span className={credential.failureCount > 0 ? 'text-red-500 font-medium' : ''}>
@@ -214,42 +222,47 @@ export function CredentialCard({ credential, onViewBalance }: CredentialCardProp
               <RefreshCw className="h-4 w-4 mr-1" />
               重置失败
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const newPriority = Math.max(0, credential.priority - 1)
-                setPriority.mutate(
-                  { id: credential.id, priority: newPriority },
-                  {
-                    onSuccess: (res) => toast.success(res.message),
-                    onError: (err) => toast.error('操作失败: ' + (err as Error).message),
-                  }
-                )
-              }}
-              disabled={setPriority.isPending || credential.priority === 0}
-            >
-              <ChevronUp className="h-4 w-4 mr-1" />
-              提高优先级
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const newPriority = credential.priority + 1
-                setPriority.mutate(
-                  { id: credential.id, priority: newPriority },
-                  {
-                    onSuccess: (res) => toast.success(res.message),
-                    onError: (err) => toast.error('操作失败: ' + (err as Error).message),
-                  }
-                )
-              }}
-              disabled={setPriority.isPending}
-            >
-              <ChevronDown className="h-4 w-4 mr-1" />
-              降低优先级
-            </Button>
+            {/* 只在优先填充模式下显示优先级调整按钮 */}
+            {isPriorityMode && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const newPriority = Math.max(0, credential.priority - 1)
+                    setPriority.mutate(
+                      { id: credential.id, priority: newPriority },
+                      {
+                        onSuccess: (res) => toast.success(res.message),
+                        onError: (err) => toast.error('操作失败: ' + (err as Error).message),
+                      }
+                    )
+                  }}
+                  disabled={setPriority.isPending || credential.priority === 0}
+                >
+                  <ChevronUp className="h-4 w-4 mr-1" />
+                  提高优先级
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const newPriority = credential.priority + 1
+                    setPriority.mutate(
+                      { id: credential.id, priority: newPriority },
+                      {
+                        onSuccess: (res) => toast.success(res.message),
+                        onError: (err) => toast.error('操作失败: ' + (err as Error).message),
+                      }
+                    )
+                  }}
+                  disabled={setPriority.isPending}
+                >
+                  <ChevronDown className="h-4 w-4 mr-1" />
+                  降低优先级
+                </Button>
+              </>
+            )}
             <Button
               size="sm"
               variant="default"

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,11 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [priority, setPriority] = useState('0')
+  // 代理配置
+  const [showProxyConfig, setShowProxyConfig] = useState(false)
+  const [proxyUrl, setProxyUrl] = useState('')
+  const [proxyUsername, setProxyUsername] = useState('')
+  const [proxyPassword, setProxyPassword] = useState('')
 
   const { mutate, isPending } = useAddCredential()
 
@@ -36,6 +42,10 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
     setClientId('')
     setClientSecret('')
     setPriority('0')
+    setShowProxyConfig(false)
+    setProxyUrl('')
+    setProxyUsername('')
+    setProxyPassword('')
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -53,6 +63,12 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
       return
     }
 
+    // 代理 URL 格式验证
+    if (proxyUrl.trim() && !proxyUrl.match(/^(https?|socks5):\/\/.+/)) {
+      toast.error('代理地址格式不正确，应为 http://、https:// 或 socks5:// 开头')
+      return
+    }
+
     mutate(
       {
         refreshToken: refreshToken.trim(),
@@ -61,6 +77,9 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
         clientId: clientId.trim() || undefined,
         clientSecret: clientSecret.trim() || undefined,
         priority: parseInt(priority) || 0,
+        proxyUrl: proxyUrl.trim() || undefined,
+        proxyUsername: proxyUsername.trim() || undefined,
+        proxyPassword: proxyPassword.trim() || undefined,
       },
       {
         onSuccess: (data) => {
@@ -77,7 +96,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>添加凭据</DialogTitle>
         </DialogHeader>
@@ -177,6 +196,68 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               <p className="text-xs text-muted-foreground">
                 数字越小优先级越高，默认为 0
               </p>
+            </div>
+
+            {/* 代理配置（可折叠） */}
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                className="flex items-center justify-between w-full p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+                onClick={() => setShowProxyConfig(!showProxyConfig)}
+              >
+                <span>代理配置（可选）</span>
+                {showProxyConfig ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+              {showProxyConfig && (
+                <div className="p-3 pt-0 space-y-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    凭据级代理优先级高于池级和全局代理
+                  </p>
+                  <div className="space-y-2">
+                    <label htmlFor="proxyUrl" className="text-sm font-medium">
+                      代理地址
+                    </label>
+                    <Input
+                      id="proxyUrl"
+                      placeholder="例如 socks5://127.0.0.1:1080"
+                      value={proxyUrl}
+                      onChange={(e) => setProxyUrl(e.target.value)}
+                      disabled={isPending}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label htmlFor="proxyUsername" className="text-sm font-medium">
+                        用户名
+                      </label>
+                      <Input
+                        id="proxyUsername"
+                        placeholder="可选"
+                        value={proxyUsername}
+                        onChange={(e) => setProxyUsername(e.target.value)}
+                        disabled={isPending}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label htmlFor="proxyPassword" className="text-sm font-medium">
+                        密码
+                      </label>
+                      <Input
+                        id="proxyPassword"
+                        type="password"
+                        placeholder="可选"
+                        value={proxyPassword}
+                        onChange={(e) => setProxyPassword(e.target.value)}
+                        disabled={isPending}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
