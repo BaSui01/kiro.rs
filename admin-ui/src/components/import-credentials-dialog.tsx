@@ -92,7 +92,7 @@ export function ImportCredentialsDialog({ open, onOpenChange }: ImportCredential
 
     importMutation.mutate({
       credentials: parsedCredentials,
-      poolId: selectedPoolId === 'default' ? undefined : selectedPoolId, // default 池不传 poolId
+      poolId: selectedPoolId, // 始终传递 poolId，包括 default
     })
   }
 

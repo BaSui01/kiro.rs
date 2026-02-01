@@ -10,7 +10,15 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAddCredential } from '@/hooks/use-credentials'
+import { usePools } from '@/hooks/use-pools'
 import { extractErrorMessage } from '@/lib/utils'
 
 interface AddCredentialDialogProps {
@@ -27,6 +35,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [priority, setPriority] = useState('0')
+  const [poolId, setPoolId] = useState('default')
   // 代理配置
   const [showProxyConfig, setShowProxyConfig] = useState(false)
   const [proxyUrl, setProxyUrl] = useState('')
@@ -34,6 +43,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
   const [proxyPassword, setProxyPassword] = useState('')
 
   const { mutate, isPending } = useAddCredential()
+  const { pools } = usePools()
 
   const resetForm = () => {
     setRefreshToken('')
@@ -42,6 +52,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
     setClientId('')
     setClientSecret('')
     setPriority('0')
+    setPoolId('default')
     setShowProxyConfig(false)
     setProxyUrl('')
     setProxyUsername('')
@@ -77,6 +88,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
         clientId: clientId.trim() || undefined,
         clientSecret: clientSecret.trim() || undefined,
         priority: parseInt(priority) || 0,
+        poolId: poolId,
         proxyUrl: proxyUrl.trim() || undefined,
         proxyUsername: proxyUsername.trim() || undefined,
         proxyPassword: proxyPassword.trim() || undefined,
@@ -133,6 +145,26 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                 <option value="social">Social</option>
                 <option value="idc">IdC/Builder-ID/IAM</option>
               </select>
+            </div>
+
+            {/* 目标池选择 */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">目标池</label>
+              <Select value={poolId} onValueChange={setPoolId} disabled={isPending}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择目标池" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">默认池 (default)</SelectItem>
+                  {pools
+                    .filter((p) => p.id !== 'default')
+                    .map((pool) => (
+                      <SelectItem key={pool.id} value={pool.id}>
+                        {pool.name} ({pool.id})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

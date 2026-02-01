@@ -101,10 +101,13 @@ export function UnifiedDashboard({ onLogout, onSettings }: UnifiedDashboardProps
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">加载中...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-muted border-t-violet-500 mx-auto mb-4"></div>
+            <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-purple-500/30 animate-ping mx-auto"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">加载中...</p>
         </div>
       </div>
     )
@@ -116,11 +119,12 @@ export function UnifiedDashboard({ onLogout, onSettings }: UnifiedDashboardProps
     enabledPools: pools.filter((p) => p.enabled).length,
     totalCredentials: pools.reduce((sum, p) => sum + p.totalCredentials, 0),
     availableCredentials: pools.reduce((sum, p) => sum + p.availableCredentials, 0),
+    sessionCacheSize: pools.reduce((sum, p) => sum + p.sessionCacheSize, 0),
+    roundRobinCounter: pools.reduce((sum, p) => sum + p.roundRobinCounter, 0),
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* 顶部导航 */}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       <DashboardHeader
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
@@ -129,12 +133,8 @@ export function UnifiedDashboard({ onLogout, onSettings }: UnifiedDashboardProps
         onLogout={handleLogout}
       />
 
-      {/* 主内容 */}
-      <main className="container px-4 md:px-8 py-6">
-        {/* 统计卡片 */}
+      <main className="container px-4 md:px-8 py-8">
         <DashboardStats stats={stats} />
-
-        {/* 池列表 */}
         <PoolList
           pools={pools}
           expandedPools={expandedPools}
