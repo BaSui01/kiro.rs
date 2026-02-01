@@ -23,6 +23,9 @@
 - **Thinking 模式**: 支持 Claude 的 extended thinking 功能
 - **工具调用**: 完整支持 function calling / tool use
 - **多模型支持**: 支持 Sonnet、Opus、Haiku 系列模型
+- **凭据池管理**: 支持将凭据分组到不同池，每个池独立配置调度模式和代理
+- **多 API Key**: 支持创建多个 API Key，每个 Key 可绑定到特定池
+- **Admin UI**: 完整的 Web 管理后台，支持凭据、池、API Key 管理
 
 ## 支持的 API 端点
 
@@ -61,7 +64,7 @@ cargo build --release
 
 ### 2. 配置文件
 
-创建 `config.json` 配置文件：
+创建 `config.json` 配置文件（注意：JSON 不支持注释，以下注释仅供说明，实际配置请删除）：
 
 ```json
 {
@@ -95,7 +98,7 @@ cargo build --release
 ```
 ### 3. 凭证文件
 
-创建 `credentials.json` 凭证文件（从 Kiro IDE 获取）。支持两种格式：
+创建 `credentials.json` 凭证文件（从 Kiro IDE 获取）。支持两种格式（注意：JSON 不支持注释，以下注释仅供说明，实际配置请删除）：
 
 #### 单凭据格式（旧格式，向后兼容）
 
@@ -194,7 +197,7 @@ curl http://127.0.0.1:8990/v1/messages \
 | 字段 | 类型 | 默认值 | 描述                      |
 |------|------|--------|-------------------------|
 | `host` | string | `127.0.0.1` | 服务监听地址                  |
-| `port` | number | `8080` | 服务监听端口                  |
+| `port` | number | `8990` | 服务监听端口                  |
 | `apiKey` | string | - | 自定义 API Key（用于客户端认证，必配） |
 | `region` | string | `us-east-1` | AWS 区域                  |
 | `kiroVersion` | string | `0.8.0` | Kiro 版本号                |
@@ -209,6 +212,8 @@ curl http://127.0.0.1:8990/v1/messages \
 | `proxyUsername` | string | - | 代理用户名（可选） |
 | `proxyPassword` | string | - | 代理密码（可选） |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API, 填写后才会启用web管理（可选） |
+| `sessionCacheMaxCapacity` | number | `1000` | 会话缓存最大容量（用于粘性会话） |
+| `sessionCacheTtlSecs` | number | `3600` | 会话缓存 TTL（秒） |
 
 ### credentials.json
 
@@ -227,10 +232,109 @@ curl http://127.0.0.1:8990/v1/messages \
 | `priority` | number | 凭据优先级，数字越小越优先，默认为 0（多凭据格式时有效）|
 | `region` | string | 凭据级 region（可选），用于 OIDC token 刷新时指定 endpoint 的区域。未配置时回退到 config.json 的 region。注意：API 调用始终使用 config.json 的 region |
 | `machineId` | string | 凭据级机器码（可选，64位十六进制）。未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生 |
+| `poolId` | string | 凭据所属池 ID（可选），未配置时归属默认池 |
+| `proxyUrl` | string | 凭据级代理地址（可选），优先级高于池级和全局代理 |
+| `proxyUsername` | string | 凭据级代理用户名（可选） |
+| `proxyPassword` | string | 凭据级代理密码（可选） |
 
 说明：
 - IdC / Builder-ID / IAM 在本项目里属于同一种登录方式，配置时统一使用 `authMethod: "idc"`
 - 为兼容旧配置，`builder-id` / `iam` 仍可被识别，但会按 `idc` 处理
+
+### pools.json（可选）
+
+凭据池配置文件，用于将凭据分组管理。如果不需要池功能，可以不创建此文件。
+
+```json
+{
+  "pools": [
+    {
+      "id": "default",
+      "name": "默认池",
+      "description": "默认凭据池，未指定池的凭据和 API Key 都会使用此池",
+      "enabled": true,
+      "schedulingMode": "round_robin",
+      "priority": 0
+    },
+    {
+      "id": "premium",
+      "name": "高级池",
+      "description": "高优先级凭据池，用于重要任务",
+      "enabled": true,
+      "schedulingMode": "priority_fill",
+      "priority": 1
+    },
+    {
+      "id": "backup",
+      "name": "备用池",
+      "description": "备用凭据池，配置了独立代理",
+      "enabled": true,
+      "schedulingMode": "round_robin",
+      "proxyUrl": "socks5://127.0.0.1:1080",
+      "proxyUsername": "user",
+      "proxyPassword": "pass",
+      "priority": 2
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | string | 池唯一标识（必填） |
+| `name` | string | 池显示名称（必填） |
+| `description` | string | 池描述（可选） |
+| `enabled` | boolean | 是否启用，默认 true |
+| `schedulingMode` | string | 调度模式：`round_robin`（轮询）或 `priority_fill`（优先填充） |
+| `proxyUrl` | string | 池级代理地址（可选） |
+| `proxyUsername` | string | 池级代理用户名（可选） |
+| `proxyPassword` | string | 池级代理密码（可选） |
+| `priority` | number | 池优先级，数字越小越优先 |
+
+> **调度模式说明**：
+> - `round_robin`：轮询模式，依次使用池内凭据
+> - `priority_fill`：优先填充模式，优先使用高优先级凭据，用完后才用低优先级
+
+### api_keys.json（可选）
+
+多 API Key 配置文件。如果只需要单个 API Key，可以直接在 `config.json` 中配置 `apiKey` 字段。
+
+```json
+[
+  {
+    "id": 1,
+    "name": "默认 API Key",
+    "key": "sk-kiro-rs-default-key-123456",
+    "description": "默认 API Key，使用默认池",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "enabled": true
+  },
+  {
+    "id": 2,
+    "name": "高级 API Key",
+    "key": "sk-kiro-rs-premium-key-789012",
+    "description": "高级 API Key，绑定到 premium 池",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "enabled": true,
+    "poolId": "premium"
+  }
+]
+```
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | number | API Key 唯一 ID（必填） |
+| `name` | string | API Key 名称（必填） |
+| `key` | string | API Key 值（必填） |
+| `description` | string | API Key 描述（可选） |
+| `createdAt` | string | 创建时间 (RFC3339) |
+| `enabled` | boolean | 是否启用，默认 true |
+| `poolId` | string | 绑定的池 ID（可选），未配置时使用默认池 |
+
+> **API Key 路由说明**：
+> - 请求时会根据 API Key 绑定的 `poolId` 自动路由到对应的凭据池
+> - 未绑定池的 API Key 使用默认池（`default`）
+> - 如果同时配置了 `config.json` 的 `apiKey` 和 `api_keys.json`，两者都可用
 
 ## 模型映射
 
@@ -253,19 +357,35 @@ kiro-rs/
 │   │   ├── router.rs           # 路由配置
 │   │   ├── handlers.rs         # 请求处理器
 │   │   ├── middleware.rs       # 认证中间件
+│   │   ├── service.rs          # 业务逻辑服务
 │   │   ├── types.rs            # 类型定义
 │   │   ├── converter.rs        # 协议转换器
 │   │   ├── stream.rs           # 流式响应处理
+│   │   ├── websearch.rs        # WebSearch 工具处理
 │   │   └── token.rs            # Token 估算
+│   ├── admin/                  # Admin API 模块
+│   │   ├── router.rs           # Admin 路由配置
+│   │   ├── handlers.rs         # 凭据管理处理器
+│   │   ├── pool_handlers.rs    # 池管理处理器
+│   │   ├── api_key_handlers.rs # API Key 管理处理器
+│   │   ├── config_handlers.rs  # 配置管理处理器
+│   │   ├── api_keys.rs         # API Key 数据模型
+│   │   ├── service.rs          # Admin 业务逻辑
+│   │   ├── middleware.rs       # Admin 认证中间件
+│   │   ├── csrf.rs             # CSRF 保护
+│   │   └── types.rs            # Admin 类型定义
 │   └── kiro/                   # Kiro API 客户端
 │       ├── provider.rs         # API 提供者
 │       ├── token_manager.rs    # Token 管理
+│       ├── pool_manager.rs     # 凭据池管理
 │       ├── machine_id.rs       # 设备指纹生成
 │       ├── model/              # 数据模型
 │       │   ├── credentials.rs  # OAuth 凭证
 │       │   ├── events/         # 响应事件类型
 │       │   ├── requests/       # 请求类型
 │       │   └── common/         # 共享类型
+│       ├── pool/               # 凭据池模块
+│       │   └── mod.rs          # 池配置和管理
 │       └── parser/             # AWS Event Stream 解析器
 │           ├── decoder.rs      # 流式解码器
 │           ├── frame.rs        # 帧解析
@@ -273,6 +393,8 @@ kiro-rs/
 │           └── crc.rs          # CRC 校验
 ├── Cargo.toml                  # 项目配置
 ├── config.example.json         # 配置示例
+├── pools.example.json          # 池配置示例
+├── api_keys.example.json       # API Key 配置示例
 ├── admin-ui/                   # Admin UI 前端工程（构建产物会嵌入二进制）
 ├── tools/                      # 辅助工具
 └── Dockerfile                  # Docker 构建文件
@@ -375,17 +497,102 @@ RUST_LOG=debug ./target/release/kiro-rs
 
 当 `config.json` 配置了非空 `adminApiKey` 时，会启用：
 
-- **Admin API（认证同 API Key）**
-  - `GET /api/admin/credentials` - 获取所有凭据状态
-  - `POST /api/admin/credentials` - 添加新凭据
-  - `DELETE /api/admin/credentials/:id` - 删除凭据
-  - `POST /api/admin/credentials/:id/disabled` - 设置凭据禁用状态
-  - `POST /api/admin/credentials/:id/priority` - 设置凭据优先级
-  - `POST /api/admin/credentials/:id/reset` - 重置失败计数
-  - `GET /api/admin/credentials/:id/balance` - 获取凭据余额
-
 - **Admin UI**
   - `GET /admin` - 访问管理页面（需要在编译前构建 `admin-ui/dist`）
+
+- **Admin API**
+
+  所有 Admin API 请求需要 `x-api-key` 头进行认证。
+
+  **CSRF 保护**：`POST/PUT/DELETE` 请求需要额外的 `x-csrf-token` 头，Token 为一次性使用。
+
+  ### 凭据管理
+
+  | 端点 | 方法 | 描述 |
+  |------|------|------|
+  | `/api/admin/csrf-token` | GET | 获取 CSRF Token |
+  | `/api/admin/credentials` | GET | 获取所有凭据状态 |
+  | `/api/admin/credentials` | POST | 添加新凭据 |
+  | `/api/admin/credentials/import` | POST | 批量导入凭据 |
+  | `/api/admin/credentials/:id` | DELETE | 删除凭据 |
+  | `/api/admin/credentials/:id/disabled` | POST | 设置凭据禁用状态 |
+  | `/api/admin/credentials/:id/priority` | POST | 设置凭据优先级 |
+  | `/api/admin/credentials/:id/reset` | POST | 重置失败计数 |
+  | `/api/admin/credentials/:id/balance` | GET | 获取凭据余额 |
+  | `/api/admin/credentials/:id/pool` | POST | 分配凭据到池 |
+
+  ### 池管理
+
+  | 端点 | 方法 | 描述 |
+  |------|------|------|
+  | `/api/admin/pools` | GET | 获取所有池 |
+  | `/api/admin/pools` | POST | 创建新池 |
+  | `/api/admin/pools/:id` | GET | 获取池详情 |
+  | `/api/admin/pools/:id` | PUT | 更新池配置 |
+  | `/api/admin/pools/:id` | DELETE | 删除池 |
+  | `/api/admin/pools/:id/disabled` | POST | 设置池禁用状态 |
+
+  ### API Key 管理
+
+  | 端点 | 方法 | 描述 |
+  |------|------|------|
+  | `/api/admin/api-keys` | GET | 获取所有 API Keys（脱敏显示） |
+  | `/api/admin/api-keys` | POST | 创建新 API Key |
+  | `/api/admin/api-keys/:id` | PUT | 更新 API Key |
+  | `/api/admin/api-keys/:id` | DELETE | 删除 API Key |
+
+  ### 配置管理
+
+  | 端点 | 方法 | 描述 |
+  |------|------|------|
+  | `/api/admin/config` | GET | 获取当前配置 |
+  | `/api/admin/config` | PUT | 更新配置 |
+
+  **示例：添加凭据**
+  ```bash
+  # 1. 先获取 CSRF Token
+  CSRF_TOKEN=$(curl -s http://127.0.0.1:8990/api/admin/csrf-token \
+    -H "x-api-key: sk-admin-your-secret-key" | jq -r '.token')
+
+  # 2. 使用 CSRF Token 添加凭据
+  curl http://127.0.0.1:8990/api/admin/credentials \
+    -H "x-api-key: sk-admin-your-secret-key" \
+    -H "x-csrf-token: $CSRF_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "refreshToken": "your-refresh-token",
+      "expiresAt": "2025-01-01T00:00:00Z",
+      "authMethod": "social"
+    }'
+  ```
+
+  **示例：创建池**
+  ```bash
+  curl http://127.0.0.1:8990/api/admin/pools \
+    -H "x-api-key: sk-admin-your-secret-key" \
+    -H "x-csrf-token: $CSRF_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "id": "my-pool",
+      "name": "我的池",
+      "description": "自定义凭据池",
+      "schedulingMode": "round_robin"
+    }'
+  ```
+
+  **示例：创建 API Key**
+  ```bash
+  curl http://127.0.0.1:8990/api/admin/api-keys \
+    -H "x-api-key: sk-admin-your-secret-key" \
+    -H "x-csrf-token: $CSRF_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "我的 API Key",
+      "key": "sk-my-custom-key-123456",
+      "description": "用于特定用途",
+      "poolId": "my-pool"
+    }'
+  ```
 
 ## License
 

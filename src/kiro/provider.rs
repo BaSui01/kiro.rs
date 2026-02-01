@@ -35,6 +35,7 @@ pub struct KiroProvider {
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
+    #[allow(dead_code)]
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
         Self::with_proxy(token_manager, None)
     }
@@ -51,6 +52,7 @@ impl KiroProvider {
     }
 
     /// 获取 token_manager 的引用
+    #[allow(dead_code)]
     pub fn token_manager(&self) -> &MultiTokenManager {
         &self.token_manager
     }
@@ -189,8 +191,29 @@ impl KiroProvider {
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，不做解析
+    #[allow(dead_code)]
     pub async fn call_api(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
-        self.call_api_with_retry(request_body, false).await
+        self.call_api_with_retry(request_body, false, None).await
+    }
+
+    /// 发送非流式 API 请求（带会话粘性）
+    ///
+    /// 支持粘性会话轮询：同一会话的请求始终路由到同一凭据
+    ///
+    /// # Arguments
+    /// * `request_body` - JSON 格式的请求体字符串
+    /// * `session_id` - 会话标识（可选）
+    ///
+    /// # Returns
+    /// 返回原始的 HTTP Response，不做解析
+    #[allow(dead_code)]
+    pub async fn call_api_with_session(
+        &self,
+        request_body: &str,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<reqwest::Response> {
+        self.call_api_with_retry(request_body, false, session_id)
+            .await
     }
 
     /// 发送流式 API 请求
@@ -206,8 +229,28 @@ impl KiroProvider {
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，调用方负责处理流式数据
+    #[allow(dead_code)]
     pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
-        self.call_api_with_retry(request_body, true).await
+        self.call_api_with_retry(request_body, true, None).await
+    }
+
+    /// 发送流式 API 请求（带会话粘性）
+    ///
+    /// 支持粘性会话轮询：同一会话的请求始终路由到同一凭据
+    ///
+    /// # Arguments
+    /// * `request_body` - JSON 格式的请求体字符串
+    /// * `session_id` - 会话标识（可选）
+    ///
+    /// # Returns
+    /// 返回原始的 HTTP Response，调用方负责处理流式数据
+    pub async fn call_api_stream_with_session(
+        &self,
+        request_body: &str,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<reqwest::Response> {
+        self.call_api_with_retry(request_body, true, session_id)
+            .await
     }
 
     /// 发送 MCP API 请求
@@ -348,10 +391,15 @@ impl KiroProvider {
     /// - 每个凭据最多重试 MAX_RETRIES_PER_CREDENTIAL 次
     /// - 总重试次数 = min(凭据数量 × 每凭据重试次数, MAX_TOTAL_RETRIES)
     /// - 硬上限 9 次，避免无限重试
+    ///
+    /// 粘性会话：
+    /// - 如果提供了 session_id，同一会话的请求会路由到同一凭据
+    /// - 新会话按轮询方式分配凭据
     async fn call_api_with_retry(
         &self,
         request_body: &str,
         is_stream: bool,
+        session_id: Option<&str>,
     ) -> anyhow::Result<reqwest::Response> {
         let total_credentials = self.token_manager.total_count();
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
@@ -359,8 +407,12 @@ impl KiroProvider {
         let api_type = if is_stream { "流式" } else { "非流式" };
 
         for attempt in 0..max_retries {
-            // 获取调用上下文（绑定 index、credentials、token）
-            let ctx = match self.token_manager.acquire_context().await {
+            // 获取调用上下文（支持粘性会话）
+            let ctx = match self
+                .token_manager
+                .acquire_context_for_session(session_id)
+                .await
+            {
                 Ok(c) => c,
                 Err(e) => {
                     last_error = Some(e);
@@ -613,6 +665,7 @@ mod tests {
             id: 1,
             credentials,
             token: "test_token".to_string(),
+            proxy_config: None,
         };
         let headers = provider.build_headers(&ctx).unwrap();
 

@@ -1,5 +1,7 @@
 //! Anthropic API 路由配置
 
+use std::sync::Arc;
+
 use axum::{
     Router,
     extract::DefaultBodyLimit,
@@ -7,6 +9,8 @@ use axum::{
     routing::{get, post},
 };
 
+use crate::admin::ApiKeyManager;
+use crate::kiro::pool_manager::PoolManager;
 use crate::kiro::provider::KiroProvider;
 
 use super::{
@@ -39,12 +43,36 @@ pub fn create_router_with_provider(
     kiro_provider: Option<KiroProvider>,
     profile_arn: Option<String>,
 ) -> Router {
+    create_router_full(api_key, kiro_provider, profile_arn, None, None)
+}
+
+/// 创建完整的 Anthropic API 路由（支持多 API Key 和池路由）
+///
+/// # 参数
+/// - `api_key`: 静态 API 密钥（后备）
+/// - `kiro_provider`: 可选的 KiroProvider（默认池使用）
+/// - `profile_arn`: 可选的 Profile ARN
+/// - `api_key_manager`: 可选的 API Key 管理器（多 API Key 支持）
+/// - `pool_manager`: 可选的池管理器（API Key 绑定池路由）
+pub fn create_router_full(
+    api_key: impl Into<String>,
+    kiro_provider: Option<KiroProvider>,
+    profile_arn: Option<String>,
+    api_key_manager: Option<Arc<ApiKeyManager>>,
+    pool_manager: Option<Arc<PoolManager>>,
+) -> Router {
     let mut state = AppState::new(api_key);
     if let Some(provider) = kiro_provider {
         state = state.with_kiro_provider(provider);
     }
     if let Some(arn) = profile_arn {
         state = state.with_profile_arn(arn);
+    }
+    if let Some(manager) = api_key_manager {
+        state = state.with_api_key_manager(manager);
+    }
+    if let Some(manager) = pool_manager {
+        state = state.with_pool_manager(manager);
     }
 
     // 需要认证的 /v1 路由

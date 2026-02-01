@@ -449,6 +449,11 @@ impl SseStateManager {
 /// 上下文窗口大小（200k tokens）
 const CONTEXT_WINDOW_SIZE: i32 = 200_000;
 
+/// thinking_buffer 最大长度限制（1MB）
+///
+/// 防止恶意输入导致内存耗尽（OOM）
+const MAX_THINKING_BUFFER_SIZE: usize = 1024 * 1024;
+
 /// 流处理上下文
 pub struct StreamContext {
     /// SSE 状态管理器
@@ -629,6 +634,24 @@ impl StreamContext {
         // 将内容添加到缓冲区进行处理
         self.thinking_buffer.push_str(content);
 
+        // 安全检查：防止缓冲区无限增长导致 OOM
+        if self.thinking_buffer.len() > MAX_THINKING_BUFFER_SIZE {
+            tracing::warn!(
+                "thinking_buffer 超过最大限制 ({} bytes)，强制 flush",
+                MAX_THINKING_BUFFER_SIZE
+            );
+            // 强制输出缓冲区内容
+            let buffer_content = std::mem::take(&mut self.thinking_buffer);
+            if self.in_thinking_block {
+                if let Some(thinking_index) = self.thinking_block_index {
+                    events.push(self.create_thinking_delta_event(thinking_index, &buffer_content));
+                }
+            } else {
+                events.extend(self.create_text_delta_events(&buffer_content));
+            }
+            return events;
+        }
+
         loop {
             if !self.in_thinking_block && !self.thinking_extracted {
                 // 查找 <thinking> 开始标签（跳过被反引号包裹的）
@@ -732,8 +755,7 @@ impl StreamContext {
             } else {
                 // thinking 已提取完成，剩余内容作为 text_delta
                 if !self.thinking_buffer.is_empty() {
-                    let remaining = self.thinking_buffer.clone();
-                    self.thinking_buffer.clear();
+                    let remaining = std::mem::take(&mut self.thinking_buffer);
                     events.extend(self.create_text_delta_events(&remaining));
                 }
                 break;
@@ -995,10 +1017,9 @@ impl StreamContext {
                 }
             } else {
                 // 否则发送剩余内容作为 text_delta
-                let buffer_content = self.thinking_buffer.clone();
+                let buffer_content = std::mem::take(&mut self.thinking_buffer);
                 events.extend(self.create_text_delta_events(&buffer_content));
             }
-            self.thinking_buffer.clear();
         }
 
         // 使用从 contextUsageEvent 计算的 input_tokens，如果没有则使用估算值
@@ -1036,8 +1057,13 @@ pub struct BufferedStreamContext {
 
 impl BufferedStreamContext {
     /// 创建缓冲流上下文
-    pub fn new(model: impl Into<String>, estimated_input_tokens: i32, thinking_enabled: bool) -> Self {
-        let inner = StreamContext::new_with_thinking(model, estimated_input_tokens, thinking_enabled);
+    pub fn new(
+        model: impl Into<String>,
+        estimated_input_tokens: i32,
+        thinking_enabled: bool,
+    ) -> Self {
+        let inner =
+            StreamContext::new_with_thinking(model, estimated_input_tokens, thinking_enabled);
         Self {
             inner,
             event_buffer: Vec::new(),
@@ -1102,13 +1128,14 @@ impl BufferedStreamContext {
 }
 
 /// 简单的 token 估算
+///
+/// 使用迭代器避免创建中间 Vec，提高性能
 fn estimate_tokens(text: &str) -> i32 {
-    let chars: Vec<char> = text.chars().collect();
-    let mut chinese_count = 0;
-    let mut other_count = 0;
+    let mut chinese_count = 0i32;
+    let mut other_count = 0i32;
 
-    for c in &chars {
-        if *c >= '\u{4E00}' && *c <= '\u{9FFF}' {
+    for c in text.chars() {
+        if c >= '\u{4E00}' && c <= '\u{9FFF}' {
             chinese_count += 1;
         } else {
             other_count += 1;

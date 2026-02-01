@@ -26,8 +26,10 @@ mod converter;
 mod handlers;
 mod middleware;
 mod router;
+mod service;
 mod stream;
 pub mod types;
 mod websearch;
 
-pub use router::create_router_with_provider;
+pub use middleware::AuthenticatedPoolId;
+pub use router::{create_router_full, create_router_with_provider};

@@ -57,6 +57,24 @@ pub struct KiroCredentials {
     /// 未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine_id: Option<String>,
+
+    // ============ 池和代理配置 ============
+
+    /// 所属池 ID（未配置时归入默认池）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool_id: Option<String>,
+
+    /// 凭据级代理 URL（优先级高于池级和全局代理）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
+
+    /// 凭据级代理用户名
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_username: Option<String>,
+
+    /// 凭据级代理密码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_password: Option<String>,
 }
 
 /// 判断是否为零（用于跳过序列化）
@@ -130,6 +148,7 @@ impl CredentialsConfig {
     }
 
     /// 获取凭据数量
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         match self {
             CredentialsConfig::Single(_) => 1,
@@ -138,6 +157,7 @@ impl CredentialsConfig {
     }
 
     /// 判断是否为空
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         match self {
             CredentialsConfig::Single(_) => false,
@@ -158,11 +178,13 @@ impl KiroCredentials {
     }
 
     /// 从 JSON 字符串解析凭证
+    #[allow(dead_code)]
     pub fn from_json(json_string: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_string)
     }
 
     /// 从文件加载凭证
+    #[allow(dead_code)]
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let content = fs::read_to_string(path.as_ref())?;
         if content.is_empty() {
@@ -173,6 +195,7 @@ impl KiroCredentials {
     }
 
     /// 序列化为格式化的 JSON 字符串
+    #[allow(dead_code)]
     pub fn to_pretty_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
@@ -237,6 +260,10 @@ mod tests {
             priority: 0,
             region: None,
             machine_id: None,
+            pool_id: None,
+            proxy_url: None,
+            proxy_username: None,
+            proxy_password: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -347,6 +374,10 @@ mod tests {
             priority: 0,
             region: Some("eu-west-1".to_string()),
             machine_id: None,
+            pool_id: None,
+            proxy_url: None,
+            proxy_username: None,
+            proxy_password: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -369,6 +400,10 @@ mod tests {
             priority: 0,
             region: None,
             machine_id: None,
+            pool_id: None,
+            proxy_url: None,
+            proxy_username: None,
+            proxy_password: None,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -473,6 +508,10 @@ mod tests {
             priority: 3,
             region: Some("us-west-2".to_string()),
             machine_id: Some("c".repeat(64)),
+            pool_id: None,
+            proxy_url: None,
+            proxy_username: None,
+            proxy_password: None,
         };
 
         let json = original.to_pretty_json().unwrap();
@@ -484,5 +523,33 @@ mod tests {
         assert_eq!(parsed.priority, original.priority);
         assert_eq!(parsed.region, original.region);
         assert_eq!(parsed.machine_id, original.machine_id);
+    }
+
+    // ============ Pool 和 Proxy 字段测试 ============
+
+    #[test]
+    fn test_pool_id_field_parsing() {
+        let json = r#"{
+            "refreshToken": "test_refresh",
+            "poolId": "premium"
+        }"#;
+
+        let creds = KiroCredentials::from_json(json).unwrap();
+        assert_eq!(creds.pool_id, Some("premium".to_string()));
+    }
+
+    #[test]
+    fn test_proxy_fields_parsing() {
+        let json = r#"{
+            "refreshToken": "test_refresh",
+            "proxyUrl": "socks5://127.0.0.1:1080",
+            "proxyUsername": "user",
+            "proxyPassword": "pass"
+        }"#;
+
+        let creds = KiroCredentials::from_json(json).unwrap();
+        assert_eq!(creds.proxy_url, Some("socks5://127.0.0.1:1080".to_string()));
+        assert_eq!(creds.proxy_username, Some("user".to_string()));
+        assert_eq!(creds.proxy_password, Some("pass".to_string()));
     }
 }

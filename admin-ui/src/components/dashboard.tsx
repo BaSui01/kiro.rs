@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { RefreshCw, LogOut, Moon, Sun, Server, Plus } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { RefreshCw, LogOut, Moon, Sun, Server, Plus, Users, RotateCcw, Settings, Upload, Shuffle, ArrowDownToLine, Layers } from 'lucide-react'
+import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { storage } from '@/lib/storage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,16 +9,22 @@ import { Badge } from '@/components/ui/badge'
 import { CredentialCard } from '@/components/credential-card'
 import { BalanceDialog } from '@/components/balance-dialog'
 import { AddCredentialDialog } from '@/components/add-credential-dialog'
+import { ImportCredentialsDialog } from '@/components/import-credentials-dialog'
 import { useCredentials } from '@/hooks/use-credentials'
+import { setSchedulingMode } from '@/api/credentials'
+import type { SchedulingMode } from '@/types/api'
 
 interface DashboardProps {
   onLogout: () => void
+  onSettings: () => void
+  onPools?: () => void
 }
 
-export function Dashboard({ onLogout }: DashboardProps) {
+export function Dashboard({ onLogout, onSettings, onPools }: DashboardProps) {
   const [selectedCredentialId, setSelectedCredentialId] = useState<number | null>(null)
   const [balanceDialogOpen, setBalanceDialogOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return document.documentElement.classList.contains('dark')
@@ -28,6 +34,25 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
   const queryClient = useQueryClient()
   const { data, isLoading, error, refetch } = useCredentials()
+
+  // 调度模式切换
+  const schedulingModeMutation = useMutation({
+    mutationFn: setSchedulingMode,
+    onSuccess: (_, mode) => {
+      const modeName = mode === 'round_robin' ? '轮询模式' : '优先填充模式'
+      toast.success(`已切换为${modeName}`)
+      queryClient.invalidateQueries({ queryKey: ['credentials'] })
+    },
+    onError: (error: Error) => {
+      toast.error(`切换失败: ${error.message}`)
+    },
+  })
+
+  const handleToggleSchedulingMode = () => {
+    const currentMode = data?.schedulingMode || 'round_robin'
+    const newMode: SchedulingMode = currentMode === 'round_robin' ? 'priority_fill' : 'round_robin'
+    schedulingModeMutation.mutate(newMode)
+  }
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
@@ -94,6 +119,14 @@ export function Dashboard({ onLogout }: DashboardProps) {
             <Button variant="ghost" size="icon" onClick={handleRefresh}>
               <RefreshCw className="h-5 w-5" />
             </Button>
+            {onPools && (
+              <Button variant="ghost" size="icon" onClick={onPools} title="凭证池管理">
+                <Layers className="h-5 w-5" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onSettings}>
+              <Settings className="h-5 w-5" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />
             </Button>
@@ -104,7 +137,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       {/* 主内容 */}
       <main className="container px-4 md:px-8 py-6">
         {/* 统计卡片 */}
-        <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -127,27 +160,78 @@ export function Dashboard({ onLogout }: DashboardProps) {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                当前活跃
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Users className="h-4 w-4" />
+                会话缓存
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold flex items-center gap-2">
-                #{data?.currentId || '-'}
-                <Badge variant="success">活跃</Badge>
-              </div>
+              <div className="text-2xl font-bold text-blue-600">{data?.sessionCacheSize || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">粘性会话数</p>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <RotateCcw className="h-4 w-4" />
+                {data?.schedulingMode === 'round_robin' ? '轮询计数' : '当前凭据'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data?.schedulingMode === 'round_robin' ? (
+                <>
+                  <div className="text-2xl font-bold text-orange-600">{data?.roundRobinCounter || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">新会话分配</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold flex items-center gap-2">
+                    #{data?.currentId || '-'}
+                    <Badge variant="success">活跃</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">优先使用中</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 调度模式切换 */}
+        <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">调度模式:</span>
+            <Badge variant={data?.schedulingMode === 'round_robin' ? 'default' : 'secondary'}>
+              {data?.schedulingMode === 'round_robin' ? (
+                <><Shuffle className="h-3 w-3 mr-1" />轮询模式</>
+              ) : (
+                <><ArrowDownToLine className="h-3 w-3 mr-1" />优先填充</>
+              )}
+            </Badge>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleSchedulingMode}
+            disabled={schedulingModeMutation.isPending}
+          >
+            {schedulingModeMutation.isPending ? '切换中...' : '切换模式'}
+          </Button>
         </div>
 
         {/* 凭据列表 */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">凭据管理</h2>
-            <Button onClick={() => setAddDialogOpen(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              添加凭据
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setImportDialogOpen(true)} size="sm" variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                导入
+              </Button>
+              <Button onClick={() => setAddDialogOpen(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                添加凭据
+              </Button>
+            </div>
           </div>
           {data?.credentials.length === 0 ? (
             <Card>
@@ -162,6 +246,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
                   key={credential.id}
                   credential={credential}
                   onViewBalance={handleViewBalance}
+                  schedulingMode={data?.schedulingMode || 'round_robin'}
                 />
               ))}
             </div>
@@ -180,6 +265,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
       <AddCredentialDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
+      />
+
+      {/* 导入凭据对话框 */}
+      <ImportCredentialsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
       />
     </div>
   )

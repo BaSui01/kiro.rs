@@ -8,8 +8,9 @@ use crate::kiro::token_manager::MultiTokenManager;
 use super::error::AdminServiceError;
 use super::types::{
     AddCredentialRequest, AddCredentialResponse, BalanceResponse, CredentialStatusItem,
-    CredentialsStatusResponse,
+    CredentialsStatusResponse, IdcCredentialItem, ImportCredentialsResponse,
 };
+use crate::kiro::token_manager::SchedulingMode;
 
 /// Admin 服务
 ///
@@ -50,6 +51,9 @@ impl AdminService {
             available: snapshot.available,
             current_id: snapshot.current_id,
             credentials,
+            session_cache_size: snapshot.session_cache_size,
+            round_robin_counter: snapshot.round_robin_counter,
+            scheduling_mode: snapshot.scheduling_mode,
         }
     }
 
@@ -130,6 +134,11 @@ impl AdminService {
             priority: req.priority,
             region: req.region,
             machine_id: req.machine_id,
+            // 池和代理配置
+            pool_id: req.pool_id,
+            proxy_url: req.proxy_url,
+            proxy_username: req.proxy_username,
+            proxy_password: req.proxy_password,
         };
 
         // 调用 token_manager 添加凭据
@@ -151,6 +160,93 @@ impl AdminService {
         self.token_manager
             .delete_credential(id)
             .map_err(|e| self.classify_delete_error(e, id))
+    }
+
+    /// 批量导入凭据（从 IdC 格式转换）
+    pub async fn import_credentials(
+        &self,
+        items: Vec<IdcCredentialItem>,
+        pool_id: Option<String>,
+    ) -> Result<ImportCredentialsResponse, AdminServiceError> {
+        let mut imported_count = 0;
+        let mut skipped_count = 0;
+        let mut credential_ids = Vec::new();
+        let mut skipped_items = Vec::new();
+
+        for (index, item) in items.into_iter().enumerate() {
+            // 检查必要字段
+            let refresh_token = match &item.refresh_token {
+                Some(rt) if !rt.is_empty() => rt.clone(),
+                _ => {
+                    let label = item.label.as_deref().unwrap_or("未知");
+                    skipped_items.push(format!("#{}: {} - 缺少 refreshToken", index + 1, label));
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            // 判断认证方式：有 clientId 和 clientSecret 则为 IdC，否则为 Social
+            let auth_method = if item.client_id.is_some() && item.client_secret.is_some() {
+                "idc".to_string()
+            } else {
+                "social".to_string()
+            };
+
+            // 构建凭据对象
+            let new_cred = KiroCredentials {
+                id: None,
+                access_token: item.access_token,
+                refresh_token: Some(refresh_token),
+                profile_arn: None,
+                expires_at: item.expires_at,
+                auth_method: Some(auth_method),
+                client_id: item.client_id,
+                client_secret: item.client_secret,
+                priority: 0,
+                region: item.region,
+                machine_id: None,
+                // 池配置（使用传入的 pool_id）
+                pool_id: pool_id.clone(),
+                proxy_url: None,
+                proxy_username: None,
+                proxy_password: None,
+            };
+
+            // 尝试添加凭据
+            match self.token_manager.add_credential(new_cred).await {
+                Ok(id) => {
+                    credential_ids.push(id);
+                    imported_count += 1;
+                }
+                Err(e) => {
+                    let label = item.label.as_deref().unwrap_or("未知");
+                    skipped_items.push(format!("#{}: {} - {}", index + 1, label, e));
+                    skipped_count += 1;
+                }
+            }
+        }
+
+        Ok(ImportCredentialsResponse {
+            success: imported_count > 0,
+            message: format!(
+                "导入完成：成功 {} 个，跳过 {} 个",
+                imported_count, skipped_count
+            ),
+            imported_count,
+            skipped_count,
+            credential_ids,
+            skipped_items,
+        })
+    }
+
+    /// 设置调度模式
+    pub fn set_scheduling_mode(&self, mode: SchedulingMode) {
+        self.token_manager.set_scheduling_mode(mode);
+    }
+
+    /// 获取当前调度模式
+    pub fn get_scheduling_mode(&self) -> SchedulingMode {
+        self.token_manager.get_scheduling_mode()
     }
 
     /// 分类简单操作错误（set_disabled, set_priority, reset_and_enable）

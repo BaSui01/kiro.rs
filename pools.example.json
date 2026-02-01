@@ -1,0 +1,31 @@
+{
+  "pools": [
+    {
+      "id": "default",
+      "name": "默认池",
+      "description": "默认凭据池，未指定池的凭据和 API Key 都会使用此池",
+      "enabled": true,
+      "schedulingMode": "round_robin",
+      "priority": 0
+    },
+    {
+      "id": "premium",
+      "name": "高级池",
+      "description": "高优先级凭据池，用于重要任务",
+      "enabled": true,
+      "schedulingMode": "priority_fill",
+      "priority": 1
+    },
+    {
+      "id": "backup",
+      "name": "备用池",
+      "description": "备用凭据池，配置了独立代理",
+      "enabled": true,
+      "schedulingMode": "round_robin",
+      "proxyUrl": "socks5://127.0.0.1:1080",
+      "proxyUsername": "user",
+      "proxyPassword": "pass",
+      "priority": 2
+    }
+  ]
+}
