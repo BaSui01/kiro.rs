@@ -36,6 +36,7 @@ pub enum PoolError {
     TokenManagerError(String),
 }
 
+#[allow(dead_code)]
 impl PoolError {
     /// 检查是否为"池不存在"错误
     pub fn is_pool_not_found(&self) -> bool {

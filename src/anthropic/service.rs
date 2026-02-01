@@ -59,6 +59,7 @@ pub enum ValidationResult {
     /// 请求转换失败
     ConversionFailed(ConversionError),
     /// 序列化失败
+    #[allow(dead_code)]
     SerializationFailed(String),
 }
 

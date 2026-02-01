@@ -17,7 +17,7 @@
 //! ```rust,ignore
 //! use kiro_rs::anthropic;
 //!
-//! let app = anthropic::create_router("your-api-key");
+//! let app = anthropic::create_router(api_key_manager, None, None, None);
 //! let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 //! axum::serve(listener, app).await?;
 //! ```
@@ -31,5 +31,4 @@ mod stream;
 pub mod types;
 mod websearch;
 
-pub use middleware::AuthenticatedPoolId;
-pub use router::{create_router_full, create_router_with_provider};
+pub use router::create_router;

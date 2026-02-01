@@ -126,7 +126,16 @@ async fn handle_messages_request(
     log_request(&payload, &headers, endpoint, &pool_id);
 
     // 根据 pool_id 选择 KiroProvider
-    let kiro_provider = resolve_kiro_provider(&state, &pool_id);
+    let kiro_provider = match resolve_kiro_provider(&state, &pool_id) {
+        Ok(provider) => provider,
+        Err(pool_error) => {
+            return create_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "pool_unavailable",
+                &pool_error,
+            );
+        }
+    };
 
     // 验证并准备请求
     match service::validate_and_prepare_request(
@@ -163,33 +172,52 @@ async fn handle_messages_request(
 
 /// 根据 pool_id 解析 KiroProvider
 ///
-/// 优先级：
-/// 1. 如果有 PoolManager 且 pool_id 有效，使用对应池的 Provider
-/// 2. 否则使用默认的 kiro_provider
-fn resolve_kiro_provider(state: &AppState, pool_id: &AuthenticatedPoolId) -> Option<Arc<KiroProvider>> {
+/// # 返回
+/// - `Ok(Some(provider))` - 成功获取 Provider
+/// - `Ok(None)` - 无 Provider 配置
+/// - `Err(msg)` - API Key 绑定的池不可用（不应回退）
+fn resolve_kiro_provider(
+    state: &AppState,
+    pool_id: &AuthenticatedPoolId,
+) -> Result<Option<Arc<KiroProvider>>, String> {
     // 如果有 PoolManager，尝试根据 pool_id 获取池
     if let Some(ref pool_manager) = state.pool_manager {
         let pool_id_str = pool_id.0.as_deref();
-        if let Some(pool_runtime) = pool_manager.get_pool_for_api_key(pool_id_str) {
-            tracing::debug!(
-                pool_id = ?pool_id_str,
-                actual_pool = %pool_runtime.config.id,
-                "使用 API Key 绑定的池"
-            );
-            // 为该池创建 KiroProvider
-            // 注意：这里我们复用池的 token_manager
+
+        // 如果 API Key 绑定了特定池，必须使用该池
+        if let Some(bound_pool_id) = pool_id_str {
+            if let Some(pool_runtime) = pool_manager.get_pool_for_api_key(Some(bound_pool_id)) {
+                tracing::debug!(
+                    pool_id = ?pool_id_str,
+                    actual_pool = %pool_runtime.config.id,
+                    "使用 API Key 绑定的池"
+                );
+                // 为该池创建 KiroProvider
+                let provider = KiroProvider::new(pool_runtime.token_manager.clone());
+                return Ok(Some(Arc::new(provider)));
+            } else {
+                // API Key 绑定的池不可用，返回错误而不是回退
+                tracing::error!(
+                    pool_id = ?bound_pool_id,
+                    "API Key 绑定的池不可用，拒绝请求"
+                );
+                return Err(format!(
+                    "API Key 绑定的池 '{}' 不可用或已禁用",
+                    bound_pool_id
+                ));
+            }
+        }
+
+        // API Key 未绑定特定池，使用默认池
+        if let Some(pool_runtime) = pool_manager.get_pool_for_api_key(None) {
+            tracing::debug!("使用默认池");
             let provider = KiroProvider::new(pool_runtime.token_manager.clone());
-            return Some(Arc::new(provider));
-        } else {
-            tracing::warn!(
-                pool_id = ?pool_id_str,
-                "API Key 绑定的池不可用，回退到默认 Provider"
-            );
+            return Ok(Some(Arc::new(provider)));
         }
     }
 
-    // 回退到默认的 kiro_provider
-    state.kiro_provider.clone()
+    // 回退到默认的 kiro_provider（无 PoolManager 时）
+    Ok(state.kiro_provider.clone())
 }
 
 /// POST /v1/messages/count_tokens
@@ -267,80 +295,175 @@ async fn handle_validated_request(ctx: RequestContext, use_buffered_stream: bool
 ///   - `false`: 标准流模式，立即发送 message_start
 ///   - `true`: 缓冲流模式（Claude Code），等待 contextUsageEvent 后再发送
 async fn handle_stream_request(ctx: RequestContext, use_buffered_stream: bool) -> Response {
-    // 调用 Kiro API（支持粘性会话轮询 + 多凭据故障转移）
-    let response = match ctx
-        .provider
-        .call_api_stream_with_session(&ctx.request_body, ctx.session_id.as_deref())
-        .await
-    {
-        Ok(resp) => resp,
-        Err(e) => {
-            tracing::error!("Kiro API 调用失败: {}", e);
-            return create_error_response(
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                &format!("上游 API 调用失败: {}", e),
-            );
-        }
-    };
+    // Handler 层重试配置
+    const MAX_HANDLER_RETRIES: usize = 2;
+    let mut last_error = None;
 
-    // 根据模式创建不同的 SSE 流
-    if use_buffered_stream {
-        // 缓冲流模式：等待 contextUsageEvent 后再发送 message_start
-        let buffered_ctx = BufferedStreamContext::new(
-            &ctx.model,
-            ctx.input_tokens,
-            ctx.thinking_enabled,
-        );
-        let stream = create_buffered_sse_stream(response, buffered_ctx);
-        build_sse_response(stream)
-    } else {
-        // 标准流模式：立即发送 message_start
-        let mut stream_ctx = StreamContext::new_with_thinking(
-            &ctx.model,
-            ctx.input_tokens,
-            ctx.thinking_enabled,
-        );
-        let initial_events = stream_ctx.generate_initial_events();
-        let stream = create_sse_stream(response, stream_ctx, initial_events);
-        build_sse_response(stream)
+    for attempt in 0..MAX_HANDLER_RETRIES {
+        // 调用 Kiro API（支持粘性会话轮询 + 多凭据故障转移）
+        let response = match ctx
+            .provider
+            .call_api_stream_with_session(&ctx.request_body, ctx.session_id.as_deref())
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                let error_msg = e.to_string();
+                // 判断是否为可重试的错误（502/503/504 或网络错误）
+                let is_retryable = error_msg.contains("502")
+                    || error_msg.contains("503")
+                    || error_msg.contains("504")
+                    || error_msg.contains("Bad Gateway")
+                    || error_msg.contains("Service Unavailable")
+                    || error_msg.contains("Gateway Timeout")
+                    || error_msg.contains("connection")
+                    || error_msg.contains("timeout");
+
+                if is_retryable && attempt + 1 < MAX_HANDLER_RETRIES {
+                    tracing::warn!(
+                        "Kiro API 调用失败（尝试 {}/{}），准备重试: {}",
+                        attempt + 1,
+                        MAX_HANDLER_RETRIES,
+                        error_msg
+                    );
+                    last_error = Some(error_msg);
+                    // 短暂延迟后重试
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+
+                tracing::error!("Kiro API 调用失败: {}", e);
+                return create_error_response(
+                    StatusCode::BAD_GATEWAY,
+                    "api_error",
+                    &format!("上游 API 调用失败: {}", e),
+                );
+            }
+        };
+
+        // 成功获取响应，根据模式创建不同的 SSE 流
+        if use_buffered_stream {
+            // 缓冲流模式：等待 contextUsageEvent 后再发送 message_start
+            let buffered_ctx = BufferedStreamContext::new(
+                &ctx.model,
+                ctx.input_tokens,
+                ctx.thinking_enabled,
+            );
+            let stream = create_buffered_sse_stream(response, buffered_ctx);
+            return build_sse_response(stream);
+        } else {
+            // 标准流模式：立即发送 message_start
+            let mut stream_ctx = StreamContext::new_with_thinking(
+                &ctx.model,
+                ctx.input_tokens,
+                ctx.thinking_enabled,
+            );
+            let initial_events = stream_ctx.generate_initial_events();
+            let stream = create_sse_stream(response, stream_ctx, initial_events);
+            return build_sse_response(stream);
+        }
     }
+
+    // 所有重试都失败
+    create_error_response(
+        StatusCode::BAD_GATEWAY,
+        "api_error",
+        &format!(
+            "上游 API 调用失败（已重试 {} 次）: {}",
+            MAX_HANDLER_RETRIES,
+            last_error.unwrap_or_else(|| "未知错误".to_string())
+        ),
+    )
 }
 
 /// 处理非流式请求
 async fn handle_non_stream_request(ctx: RequestContext) -> Response {
-    // 调用 Kiro API（支持粘性会话轮询 + 多凭据故障转移）
-    let response = match ctx
-        .provider
-        .call_api_with_session(&ctx.request_body, ctx.session_id.as_deref())
-        .await
-    {
-        Ok(resp) => resp,
-        Err(e) => {
-            tracing::error!("Kiro API 调用失败: {}", e);
-            return create_error_response(
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                &format!("上游 API 调用失败: {}", e),
-            );
-        }
-    };
+    // Handler 层重试配置
+    const MAX_HANDLER_RETRIES: usize = 2;
+    let mut last_error = None;
 
-    // 读取响应体
-    let body_bytes = match response.bytes().await {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            tracing::error!("读取响应体失败: {}", e);
-            return create_error_response(
-                StatusCode::BAD_GATEWAY,
-                "api_error",
-                &format!("读取响应失败: {}", e),
-            );
-        }
-    };
+    for attempt in 0..MAX_HANDLER_RETRIES {
+        // 调用 Kiro API（支持粘性会话轮询 + 多凭据故障转移）
+        let response = match ctx
+            .provider
+            .call_api_with_session(&ctx.request_body, ctx.session_id.as_deref())
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                let error_msg = e.to_string();
+                // 判断是否为可重试的错误（502/503/504 或网络错误）
+                let is_retryable = error_msg.contains("502")
+                    || error_msg.contains("503")
+                    || error_msg.contains("504")
+                    || error_msg.contains("Bad Gateway")
+                    || error_msg.contains("Service Unavailable")
+                    || error_msg.contains("Gateway Timeout")
+                    || error_msg.contains("connection")
+                    || error_msg.contains("timeout");
 
-    // 解析事件流并构建响应
-    build_non_stream_response(&body_bytes, &ctx.model, ctx.input_tokens)
+                if is_retryable && attempt + 1 < MAX_HANDLER_RETRIES {
+                    tracing::warn!(
+                        "Kiro API 调用失败（尝试 {}/{}），准备重试: {}",
+                        attempt + 1,
+                        MAX_HANDLER_RETRIES,
+                        error_msg
+                    );
+                    last_error = Some(error_msg);
+                    // 短暂延迟后重试
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+
+                tracing::error!("Kiro API 调用失败: {}", e);
+                return create_error_response(
+                    StatusCode::BAD_GATEWAY,
+                    "api_error",
+                    &format!("上游 API 调用失败: {}", e),
+                );
+            }
+        };
+
+        // 读取响应体
+        let body_bytes = match response.bytes().await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let error_msg = e.to_string();
+                if attempt + 1 < MAX_HANDLER_RETRIES {
+                    tracing::warn!(
+                        "读取响应体失败（尝试 {}/{}），准备重试: {}",
+                        attempt + 1,
+                        MAX_HANDLER_RETRIES,
+                        error_msg
+                    );
+                    last_error = Some(error_msg);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+
+                tracing::error!("读取响应体失败: {}", e);
+                return create_error_response(
+                    StatusCode::BAD_GATEWAY,
+                    "api_error",
+                    &format!("读取响应失败: {}", e),
+                );
+            }
+        };
+
+        // 解析事件流并构建响应
+        return build_non_stream_response(&body_bytes, &ctx.model, ctx.input_tokens);
+    }
+
+    // 所有重试都失败
+    create_error_response(
+        StatusCode::BAD_GATEWAY,
+        "api_error",
+        &format!(
+            "上游 API 调用失败（已重试 {} 次）: {}",
+            MAX_HANDLER_RETRIES,
+            last_error.unwrap_or_else(|| "未知错误".to_string())
+        ),
+    )
 }
 
 /// 构建非流式响应

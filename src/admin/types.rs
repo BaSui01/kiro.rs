@@ -248,8 +248,6 @@ pub struct ConfigResponse {
     pub proxy_username: Option<String>,
     /// 代理密码（脱敏）
     pub proxy_password: Option<String>,
-    /// 是否配置了 API Key
-    pub has_api_key: bool,
     /// 是否配置了 Admin API Key
     pub has_admin_api_key: bool,
 }
@@ -336,9 +334,6 @@ pub struct UpdateConfigRequest {
     /// 代理密码
     #[serde(default)]
     pub proxy_password: Option<String>,
-    /// API Key（用于下游客户端认证）
-    #[serde(default)]
-    pub api_key: Option<String>,
 }
 
 // ============ 池管理 ============

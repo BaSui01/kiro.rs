@@ -32,7 +32,6 @@ mod service;
 pub mod types;
 
 pub use api_keys::ApiKeyManager;
-pub use csrf::CsrfManager;
 pub use middleware::AdminState;
 pub use router::create_admin_router;
 pub use service::AdminService;

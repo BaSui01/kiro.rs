@@ -25,11 +25,13 @@ pub struct PoolRuntime {
     /// Token 管理器
     pub token_manager: Arc<MultiTokenManager>,
     /// 池级代理配置（已解析）
+    #[allow(dead_code)]
     pub proxy_config: Option<ProxyConfig>,
 }
 
 impl PoolRuntime {
     /// 获取池 ID
+    #[allow(dead_code)]
     pub fn id(&self) -> &str {
         &self.config.id
     }
@@ -40,6 +42,7 @@ impl PoolRuntime {
     }
 
     /// 获取调度模式
+    #[allow(dead_code)]
     pub fn scheduling_mode(&self) -> SchedulingMode {
         self.config.scheduling_mode
     }
@@ -111,7 +114,6 @@ impl PoolManager {
                     reason: format!("加载凭据配置失败: {}", e),
                 }
             })?;
-        let is_multiple_format = credentials_config.is_multiple();
         let all_credentials = credentials_config.into_sorted_credentials();
 
         // 按 pool_id 分组凭据
@@ -136,7 +138,6 @@ impl PoolManager {
                 credentials,
                 pool_proxy.clone(),
                 Some(self.credentials_path.clone()),
-                is_multiple_format,
             )
             .map_err(|e| PoolError::TokenManagerError(e.to_string()))?;
 
@@ -190,6 +191,7 @@ impl PoolManager {
     }
 
     /// 获取默认池
+    #[allow(dead_code)]
     pub fn get_default_pool(&self) -> Option<Arc<PoolRuntime>> {
         self.get_pool(DEFAULT_POOL_ID)
     }
@@ -289,6 +291,7 @@ impl PoolManager {
     }
 
     /// 获取所有池 ID
+    #[allow(dead_code)]
     pub fn pool_ids(&self) -> Vec<String> {
         self.pools.read().keys().cloned().collect()
     }
@@ -318,7 +321,6 @@ impl PoolManager {
             vec![],
             pool_proxy.clone(),
             Some(self.credentials_path.clone()),
-            true,
         )
         .map_err(|e| PoolError::TokenManagerError(e.to_string()))?;
 

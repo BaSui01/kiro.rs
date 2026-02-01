@@ -31,7 +31,6 @@ pub async fn get_config(State(state): State<AdminState>) -> impl IntoResponse {
         proxy_username: config.proxy_username,
         // 脱敏代理密码
         proxy_password: config.proxy_password.map(|_| "***".to_string()),
-        has_api_key: config.api_key.is_some(),
         has_admin_api_key: config.admin_api_key.is_some(),
     };
 
@@ -80,15 +79,6 @@ pub async fn update_config(
                 config.proxy_password = None;
             } else if !proxy_password.is_empty() {
                 config.proxy_password = Some(proxy_password);
-            }
-            // 空字符串：不修改
-        }
-        // API Key：空字符串表示不修改，特殊值 "__CLEAR__" 表示清空
-        if let Some(api_key) = payload.api_key {
-            if api_key == "__CLEAR__" {
-                config.api_key = None;
-            } else if !api_key.is_empty() {
-                config.api_key = Some(api_key);
             }
             // 空字符串：不修改
         }
