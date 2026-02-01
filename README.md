@@ -175,6 +175,62 @@ cargo build --release
 ./target/release/kiro-rs -c /path/to/config.json --credentials /path/to/credentials.json
 ```
 
+### 4.1 Docker 部署（推荐）
+
+#### 使用 Docker Compose（最简单）
+
+1. 创建配置目录并准备配置文件：
+```bash
+mkdir -p config
+cp config.example.json config/config.json
+# 编辑 config/config.json 填入你的配置
+# 创建 config/credentials.json 填入凭据
+# 可选：创建 config/pools.json 和 config/api_keys.json
+```
+
+2. 启动服务：
+```bash
+docker-compose up -d
+```
+
+3. 查看日志：
+```bash
+docker-compose logs -f
+```
+
+4. 停止服务：
+```bash
+docker-compose down
+```
+
+#### 手动 Docker 构建
+
+```bash
+# 构建镜像
+docker build -t kiro-rs .
+
+# 运行容器
+docker run -d \
+  --name kiro-rs \
+  -p 8990:8990 \
+  -v $(pwd)/config:/app/config \
+  -e RUST_LOG=info \
+  --restart unless-stopped \
+  kiro-rs
+```
+
+#### 配置文件目录结构
+
+```
+config/
+├── config.json        # 主配置文件（必需）
+├── credentials.json   # 凭据文件（必需）
+├── pools.json         # 池配置文件（可选）
+└── api_keys.json      # API Key 配置文件（可选）
+```
+
+> **注意**：`pools.json` 和 `api_keys.json` 是可选的。如果不需要凭据池和多 API Key 功能，可以不创建这些文件。
+
 ### 5. 使用 API
 
 ```bash

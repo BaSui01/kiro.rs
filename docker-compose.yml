@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  kiro-rs:
+    build: .
+    container_name: kiro-rs
+    restart: unless-stopped
+    ports:
+      - "8990:8990"
+    volumes:
+      - ./config:/app/config
+    environment:
+      - RUST_LOG=info
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8990/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
