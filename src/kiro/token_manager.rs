@@ -2,11 +2,17 @@
 //!
 //! 负责 Token 过期检测和刷新，支持 Social 和 IdC 认证方式
 //! 支持单凭据 (TokenManager) 和多凭据 (MultiTokenManager) 管理
+//! 支持粘性会话轮询：同一会话绑定同一凭据，新会话轮询分配
 
 use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
+use dashmap::DashMap;
+use moka::sync::Cache;
 use parking_lot::Mutex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration as StdDuration;
 use tokio::sync::Mutex as TokioMutex;
 
 use std::path::PathBuf;
@@ -23,12 +29,14 @@ use crate::model::config::Config;
 /// Token 管理器
 ///
 /// 负责管理凭据和 Token 的自动刷新
+#[allow(dead_code)]
 pub struct TokenManager {
     config: Config,
     credentials: KiroCredentials,
     proxy: Option<ProxyConfig>,
 }
 
+#[allow(dead_code)]
 impl TokenManager {
     /// 创建新的 TokenManager 实例
     pub fn new(config: Config, credentials: KiroCredentials, proxy: Option<ProxyConfig>) -> Self {
@@ -437,26 +445,61 @@ pub struct ManagerSnapshot {
     pub total: usize,
     /// 可用凭据数量
     pub available: usize,
+    /// 会话缓存大小（当前缓存的会话数量）
+    pub session_cache_size: usize,
+    /// 轮询计数器（用于统计新会话分配次数）
+    pub round_robin_counter: u64,
+    /// 当前调度模式
+    pub scheduling_mode: SchedulingMode,
+}
+
+/// 凭据调度模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulingMode {
+    /// 轮询模式：新会话按轮询方式分配到不同凭据（均匀负载）
+    #[default]
+    RoundRobin,
+    /// 优先填充模式：优先使用高优先级凭据，直到失败才切换
+    PriorityFill,
 }
 
 /// 多凭据 Token 管理器
 ///
-/// 支持多个凭据的管理，实现固定优先级 + 故障转移策略
+/// 支持多个凭据的管理，实现粘性会话轮询 + 故障转移策略：
+/// - 粘性会话：同一会话的请求始终路由到同一凭据（命中上游缓存）
+/// - 轮询分配：新会话按轮询方式分配到不同凭据（均匀负载）
+/// - 优先填充：优先使用高优先级凭据，直到失败才切换
+/// - 故障转移：凭据失败时自动切换到其他可用凭据
+///
 /// 故障统计基于 API 调用结果，而非 Token 刷新结果
 pub struct MultiTokenManager {
     config: Config,
     proxy: Option<ProxyConfig>,
     /// 凭据条目列表
     entries: Mutex<Vec<CredentialEntry>>,
-    /// 当前活动凭据 ID
+    /// 当前活动凭据 ID（用于无会话请求的默认选择）
     current_id: Mutex<u64>,
-    /// Token 刷新锁，确保同一时间只有一个刷新操作
-    refresh_lock: TokioMutex<()>,
+    /// Token 刷新锁映射（按凭据 ID 分组），确保同一凭据同一时间只有一个刷新操作
+    /// 使用细粒度锁避免高并发时多个凭据刷新串行化
+    refresh_locks: DashMap<u64, Arc<TokioMutex<()>>>,
     /// 凭据文件路径（用于回写）
     credentials_path: Option<PathBuf>,
     /// 是否为多凭据格式（数组格式才回写）
     is_multiple_format: bool,
+    /// 会话到凭据的映射缓存（LRU + TTL）
+    /// Key: 会话标识, Value: 凭据 ID
+    session_map: Cache<String, u64>,
+    /// 轮询计数器（用于新会话分配）
+    round_robin_counter: AtomicU64,
+    /// 调度模式
+    scheduling_mode: Mutex<SchedulingMode>,
 }
+
+/// 会话缓存配置
+const SESSION_CACHE_MAX_CAPACITY: u64 = 10_000;
+/// 会话缓存 TTL（1 小时）
+const SESSION_CACHE_TTL_SECS: u64 = 3600;
 
 /// 每个凭据最大 API 调用失败次数
 const MAX_FAILURES_PER_CREDENTIAL: u32 = 3;
@@ -473,6 +516,8 @@ pub struct CallContext {
     pub credentials: KiroCredentials,
     /// 访问 Token
     pub token: String,
+    /// 代理配置（凭据级 > 池级 > 全局）
+    pub proxy_config: Option<ProxyConfig>,
 }
 
 impl MultiTokenManager {
@@ -546,14 +591,58 @@ impl MultiTokenManager {
             .map(|e| e.id)
             .unwrap_or(0);
 
+        // 构建会话缓存：LRU + TTL + 驱逐监听器
+        let session_map = Cache::builder()
+            .max_capacity(SESSION_CACHE_MAX_CAPACITY)
+            .time_to_live(StdDuration::from_secs(SESSION_CACHE_TTL_SECS))
+            .eviction_listener(|session_id: Arc<String>, credential_id: u64, cause| {
+                // 记录缓存驱逐事件，便于监控和调试
+                match cause {
+                    moka::notification::RemovalCause::Expired => {
+                        tracing::debug!(
+                            "会话缓存过期: session={} -> credential_id={} (TTL={}s)",
+                            &session_id[..session_id.len().min(20)],
+                            credential_id,
+                            SESSION_CACHE_TTL_SECS
+                        );
+                    }
+                    moka::notification::RemovalCause::Size => {
+                        tracing::info!(
+                            "会话缓存容量淘汰: session={} -> credential_id={} (容量上限={})",
+                            &session_id[..session_id.len().min(20)],
+                            credential_id,
+                            SESSION_CACHE_MAX_CAPACITY
+                        );
+                    }
+                    moka::notification::RemovalCause::Explicit => {
+                        tracing::debug!(
+                            "会话缓存显式移除: session={} -> credential_id={}",
+                            &session_id[..session_id.len().min(20)],
+                            credential_id
+                        );
+                    }
+                    moka::notification::RemovalCause::Replaced => {
+                        tracing::debug!(
+                            "会话缓存替换: session={} -> credential_id={}",
+                            &session_id[..session_id.len().min(20)],
+                            credential_id
+                        );
+                    }
+                }
+            })
+            .build();
+
         let manager = Self {
             config,
             proxy,
             entries: Mutex::new(entries),
             current_id: Mutex::new(initial_id),
-            refresh_lock: TokioMutex::new(()),
+            refresh_locks: DashMap::new(),
             credentials_path,
             is_multiple_format,
+            session_map,
+            round_robin_counter: AtomicU64::new(0),
+            scheduling_mode: Mutex::new(SchedulingMode::default()),
         };
 
         // 如果有新分配的 ID 或新生成的 machineId，立即持久化到配置文件
@@ -574,6 +663,7 @@ impl MultiTokenManager {
     }
 
     /// 获取当前活动凭据的克隆
+    #[allow(dead_code)]
     pub fn credentials(&self) -> KiroCredentials {
         let entries = self.entries.lock();
         let current_id = *self.current_id.lock();
@@ -602,8 +692,42 @@ impl MultiTokenManager {
     /// 如果 Token 过期或即将过期，会自动刷新
     /// Token 刷新失败时会尝试下一个可用凭据（不计入失败次数）
     pub async fn acquire_context(&self) -> anyhow::Result<CallContext> {
+        // 无会话标识时，使用默认的优先级策略
+        self.acquire_context_internal(None).await
+    }
+
+    /// 获取指定会话的 API 调用上下文（粘性会话 + 轮询）
+    ///
+    /// 实现粘性会话轮询策略：
+    /// 1. 如果有 session_id 且缓存命中，使用缓存的凭据（粘性）
+    /// 2. 如果缓存未命中或凭据不可用，轮询选择新凭据
+    /// 3. 更新会话缓存
+    ///
+    /// # Arguments
+    /// * `session_id` - 会话标识（可选）
+    pub async fn acquire_context_for_session(
+        &self,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<CallContext> {
+        self.acquire_context_internal(session_id).await
+    }
+
+    /// 内部方法：获取 API 调用上下文
+    ///
+    /// # Arguments
+    /// * `session_id` - 会话标识（可选），用于粘性会话
+    async fn acquire_context_internal(
+        &self,
+        session_id: Option<&str>,
+    ) -> anyhow::Result<CallContext> {
         let total = self.total_count();
         let mut tried_count = 0;
+
+        // 尝试从会话缓存获取凭据 ID
+        let cached_id = session_id.and_then(|sid| self.session_map.get(sid));
+
+        // 获取当前调度模式
+        let mode = *self.scheduling_mode.lock();
 
         loop {
             if tried_count >= total {
@@ -616,76 +740,155 @@ impl MultiTokenManager {
 
             let (id, credentials) = {
                 let mut entries = self.entries.lock();
-                let current_id = *self.current_id.lock();
 
-                // 找到当前凭据
-                if let Some(entry) = entries.iter().find(|e| e.id == current_id && !e.disabled) {
-                    (entry.id, entry.credentials.clone())
-                } else {
-                    // 当前凭据不可用，选择优先级最高的可用凭据
-                    let mut best = entries
-                        .iter()
-                        .filter(|e| !e.disabled)
-                        .min_by_key(|e| e.credentials.priority);
-
-                    // 没有可用凭据：如果是“自动禁用导致全灭”，做一次类似重启的自愈
-                    if best.is_none()
-                        && entries.iter().any(|e| {
-                            e.disabled && e.disabled_reason == Some(DisabledReason::TooManyFailures)
-                        })
-                    {
-                        tracing::warn!(
-                            "所有凭据均已被自动禁用，执行自愈：重置失败计数并重新启用（等价于重启）"
-                        );
-                        for e in entries.iter_mut() {
-                            if e.disabled_reason == Some(DisabledReason::TooManyFailures) {
-                                e.disabled = false;
-                                e.disabled_reason = None;
-                                e.failure_count = 0;
+                // 优先使用缓存的凭据 ID（粘性会话）
+                let target_id = if tried_count == 0 {
+                    cached_id.or_else(|| {
+                        // 无缓存时，根据调度模式选择凭据
+                        if session_id.is_some() {
+                            match mode {
+                                SchedulingMode::RoundRobin => self.select_by_round_robin(&entries),
+                                SchedulingMode::PriorityFill => self.select_by_priority(&entries),
                             }
+                        } else {
+                            // 无会话标识时，使用当前凭据
+                            Some(*self.current_id.lock())
                         }
-                        best = entries
-                            .iter()
-                            .filter(|e| !e.disabled)
-                            .min_by_key(|e| e.credentials.priority);
+                    })
+                } else {
+                    // 重试时，根据调度模式选择下一个凭据
+                    match mode {
+                        SchedulingMode::RoundRobin => self.select_by_round_robin(&entries),
+                        SchedulingMode::PriorityFill => self.select_by_priority(&entries),
                     }
+                };
 
-                    if let Some(entry) = best {
-                        // 先提取数据
-                        let new_id = entry.id;
-                        let new_creds = entry.credentials.clone();
-                        drop(entries);
-                        // 更新 current_id
-                        let mut current_id = self.current_id.lock();
-                        *current_id = new_id;
-                        (new_id, new_creds)
+                // 找到目标凭据
+                if let Some(tid) = target_id {
+                    if let Some(entry) = entries.iter().find(|e| e.id == tid && !e.disabled) {
+                        (entry.id, entry.credentials.clone())
                     } else {
-                        // 注意：必须在 bail! 之前计算 available_count，
-                        // 因为 available_count() 会尝试获取 entries 锁，
-                        // 而此时我们已经持有该锁，会导致死锁
-                        let available = entries.iter().filter(|e| !e.disabled).count();
-                        anyhow::bail!("所有凭据均已禁用（{}/{}）", available, total);
+                        // 目标凭据不可用，选择任意可用凭据
+                        self.select_any_available(&mut entries, total)?
                     }
+                } else {
+                    // 无目标凭据，选择任意可用凭据
+                    self.select_any_available(&mut entries, total)?
                 }
             };
 
             // 尝试获取/刷新 Token
             match self.try_ensure_token(id, &credentials).await {
                 Ok(ctx) => {
+                    // 成功后更新会话缓存
+                    if let Some(sid) = session_id {
+                        self.session_map.insert(sid.to_string(), ctx.id);
+                        tracing::debug!(
+                            "会话 {} 绑定到凭据 #{}",
+                            &sid[..sid.len().min(20)],
+                            ctx.id
+                        );
+                    }
                     return Ok(ctx);
                 }
                 Err(e) => {
                     tracing::warn!("凭据 #{} Token 刷新失败，尝试下一个凭据: {}", id, e);
-
-                    // Token 刷新失败，切换到下一个优先级的凭据（不计入失败次数）
-                    self.switch_to_next_by_priority();
                     tried_count += 1;
                 }
             }
         }
     }
 
+    /// 按优先级选择凭据（内部方法）
+    ///
+    /// 选择优先级最高（priority 最小）的可用凭据
+    fn select_by_priority(&self, entries: &[CredentialEntry]) -> Option<u64> {
+        entries
+            .iter()
+            .filter(|e| !e.disabled)
+            .min_by_key(|e| e.credentials.priority)
+            .map(|e| e.id)
+    }
+
+    /// 轮询选择凭据（内部方法）
+    ///
+    /// 按轮询方式从可用凭据中选择一个
+    fn select_by_round_robin(&self, entries: &[CredentialEntry]) -> Option<u64> {
+        let available: Vec<_> = entries.iter().filter(|e| !e.disabled).collect();
+        if available.is_empty() {
+            return None;
+        }
+
+        let counter = self.round_robin_counter.fetch_add(1, Ordering::Relaxed);
+        let index = (counter as usize) % available.len();
+        Some(available[index].id)
+    }
+
+    /// 重置轮询计数器（内部方法）
+    ///
+    /// 当凭据列表发生变化时调用，确保轮询公平性
+    /// 场景：凭据禁用/启用/添加/删除
+    fn reset_round_robin_counter(&self) {
+        let old_value = self.round_robin_counter.swap(0, Ordering::Relaxed);
+        if old_value > 0 {
+            tracing::debug!(
+                "轮询计数器已重置（凭据列表变化）: {} -> 0",
+                old_value
+            );
+        }
+    }
+
+    /// 选择任意可用凭据（内部方法）
+    ///
+    /// 当目标凭据不可用时，选择优先级最高的可用凭据
+    /// 如果所有凭据都被自动禁用，执行自愈
+    fn select_any_available(
+        &self,
+        entries: &mut Vec<CredentialEntry>,
+        total: usize,
+    ) -> anyhow::Result<(u64, KiroCredentials)> {
+        // 选择优先级最高的可用凭据
+        let mut best = entries
+            .iter()
+            .filter(|e| !e.disabled)
+            .min_by_key(|e| e.credentials.priority);
+
+        // 没有可用凭据：如果是"自动禁用导致全灭"，做一次类似重启的自愈
+        if best.is_none()
+            && entries
+                .iter()
+                .any(|e| e.disabled && e.disabled_reason == Some(DisabledReason::TooManyFailures))
+        {
+            tracing::warn!(
+                "所有凭据均已被自动禁用，执行自愈：重置失败计数并重新启用（等价于重启）"
+            );
+            for e in entries.iter_mut() {
+                if e.disabled_reason == Some(DisabledReason::TooManyFailures) {
+                    e.disabled = false;
+                    e.disabled_reason = None;
+                    e.failure_count = 0;
+                }
+            }
+            best = entries
+                .iter()
+                .filter(|e| !e.disabled)
+                .min_by_key(|e| e.credentials.priority);
+        }
+
+        if let Some(entry) = best {
+            let new_id = entry.id;
+            let new_creds = entry.credentials.clone();
+            // 更新 current_id
+            *self.current_id.lock() = new_id;
+            Ok((new_id, new_creds))
+        } else {
+            let available = entries.iter().filter(|e| !e.disabled).count();
+            anyhow::bail!("所有凭据均已禁用（{}/{}）", available, total);
+        }
+    }
+
     /// 切换到下一个优先级最高的可用凭据（内部方法）
+    #[allow(dead_code)]
     fn switch_to_next_by_priority(&self) {
         let entries = self.entries.lock();
         let mut current_id = self.current_id.lock();
@@ -733,7 +936,8 @@ impl MultiTokenManager {
 
     /// 尝试使用指定凭据获取有效 Token
     ///
-    /// 使用双重检查锁定模式，确保同一时间只有一个刷新操作
+    /// 使用双重检查锁定模式，确保同一凭据同一时间只有一个刷新操作
+    /// 使用细粒度锁（按凭据 ID 分组），避免高并发时多个凭据刷新串行化
     ///
     /// # Arguments
     /// * `id` - 凭据 ID，用于更新正确的条目
@@ -747,8 +951,13 @@ impl MultiTokenManager {
         let needs_refresh = is_token_expired(credentials) || is_token_expiring_soon(credentials);
 
         let creds = if needs_refresh {
-            // 获取刷新锁，确保同一时间只有一个刷新操作
-            let _guard = self.refresh_lock.lock().await;
+            // 获取或创建该凭据的刷新锁（细粒度锁，不同凭据可并行刷新）
+            let lock = self
+                .refresh_locks
+                .entry(id)
+                .or_insert_with(|| Arc::new(TokioMutex::new(())))
+                .clone();
+            let _guard = lock.lock().await;
 
             // 第二次检查：获取锁后重新读取凭据，因为其他请求可能已经完成刷新
             let current_creds = {
@@ -797,10 +1006,14 @@ impl MultiTokenManager {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("没有可用的 accessToken"))?;
 
+        // 解析代理配置：凭据级 > 池级（由调用方传入）> 全局
+        let proxy_config = self.resolve_proxy_config(&creds);
+
         Ok(CallContext {
             id,
             credentials: creds,
             token,
+            proxy_config,
         })
     }
 
@@ -877,28 +1090,93 @@ impl MultiTokenManager {
     /// # Arguments
     /// * `id` - 凭据 ID（来自 CallContext）
     pub fn report_failure(&self, id: u64) -> bool {
-        let mut entries = self.entries.lock();
-        let mut current_id = self.current_id.lock();
+        let should_reset_counter;
+        let has_available;
 
-        let entry = match entries.iter_mut().find(|e| e.id == id) {
-            Some(e) => e,
-            None => return entries.iter().any(|e| !e.disabled),
-        };
+        {
+            let mut entries = self.entries.lock();
+            let mut current_id = self.current_id.lock();
 
-        entry.failure_count += 1;
-        let failure_count = entry.failure_count;
+            let entry = match entries.iter_mut().find(|e| e.id == id) {
+                Some(e) => e,
+                None => return entries.iter().any(|e| !e.disabled),
+            };
 
-        tracing::warn!(
-            "凭据 #{} API 调用失败（{}/{}）",
-            id,
-            failure_count,
-            MAX_FAILURES_PER_CREDENTIAL
-        );
+            entry.failure_count += 1;
+            let failure_count = entry.failure_count;
 
-        if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
+            tracing::warn!(
+                "凭据 #{} API 调用失败（{}/{}）",
+                id,
+                failure_count,
+                MAX_FAILURES_PER_CREDENTIAL
+            );
+
+            if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
+                entry.disabled = true;
+                entry.disabled_reason = Some(DisabledReason::TooManyFailures);
+                tracing::error!("凭据 #{} 已连续失败 {} 次，已被禁用", id, failure_count);
+                should_reset_counter = true;
+
+                // 切换到优先级最高的可用凭据
+                if let Some(next) = entries
+                    .iter()
+                    .filter(|e| !e.disabled)
+                    .min_by_key(|e| e.credentials.priority)
+                {
+                    *current_id = next.id;
+                    tracing::info!(
+                        "已切换到凭据 #{}（优先级 {}）",
+                        next.id,
+                        next.credentials.priority
+                    );
+                    has_available = true;
+                } else {
+                    tracing::error!("所有凭据均已禁用！");
+                    has_available = false;
+                }
+            } else {
+                should_reset_counter = false;
+                has_available = entries.iter().any(|e| !e.disabled);
+            }
+        }
+
+        // 凭据列表变化，重置轮询计数器确保公平性（在锁外执行）
+        if should_reset_counter {
+            self.reset_round_robin_counter();
+        }
+
+        has_available
+    }
+
+    /// 报告指定凭据额度已用尽
+    ///
+    /// 用于处理 402 Payment Required 且 reason 为 `MONTHLY_REQUEST_COUNT` 的场景：
+    /// - 立即禁用该凭据（不等待连续失败阈值）
+    /// - 切换到下一个可用凭据继续重试
+    /// - 返回是否还有可用凭据
+    pub fn report_quota_exhausted(&self, id: u64) -> bool {
+        let has_available;
+
+        {
+            let mut entries = self.entries.lock();
+            let mut current_id = self.current_id.lock();
+
+            let entry = match entries.iter_mut().find(|e| e.id == id) {
+                Some(e) => e,
+                None => return entries.iter().any(|e| !e.disabled),
+            };
+
+            if entry.disabled {
+                return entries.iter().any(|e| !e.disabled);
+            }
+
             entry.disabled = true;
-            entry.disabled_reason = Some(DisabledReason::TooManyFailures);
-            tracing::error!("凭据 #{} 已连续失败 {} 次，已被禁用", id, failure_count);
+            entry.disabled_reason = Some(DisabledReason::QuotaExceeded);
+            // 设为阈值，便于在管理面板中直观看到该凭据已不可用
+            entry.failure_count = MAX_FAILURES_PER_CREDENTIAL;
+
+            tracing::error!("凭据 #{} 额度已用尽（MONTHLY_REQUEST_COUNT），已被禁用", id);
 
             // 切换到优先级最高的可用凭据
             if let Some(next) = entries
@@ -912,59 +1190,17 @@ impl MultiTokenManager {
                     next.id,
                     next.credentials.priority
                 );
+                has_available = true;
             } else {
                 tracing::error!("所有凭据均已禁用！");
-                return false;
+                has_available = false;
             }
         }
 
-        // 检查是否还有可用凭据
-        entries.iter().any(|e| !e.disabled)
-    }
+        // 凭据列表变化，重置轮询计数器确保公平性（在锁外执行）
+        self.reset_round_robin_counter();
 
-    /// 报告指定凭据额度已用尽
-    ///
-    /// 用于处理 402 Payment Required 且 reason 为 `MONTHLY_REQUEST_COUNT` 的场景：
-    /// - 立即禁用该凭据（不等待连续失败阈值）
-    /// - 切换到下一个可用凭据继续重试
-    /// - 返回是否还有可用凭据
-    pub fn report_quota_exhausted(&self, id: u64) -> bool {
-        let mut entries = self.entries.lock();
-        let mut current_id = self.current_id.lock();
-
-        let entry = match entries.iter_mut().find(|e| e.id == id) {
-            Some(e) => e,
-            None => return entries.iter().any(|e| !e.disabled),
-        };
-
-        if entry.disabled {
-            return entries.iter().any(|e| !e.disabled);
-        }
-
-        entry.disabled = true;
-        entry.disabled_reason = Some(DisabledReason::QuotaExceeded);
-        // 设为阈值，便于在管理面板中直观看到该凭据已不可用
-        entry.failure_count = MAX_FAILURES_PER_CREDENTIAL;
-
-        tracing::error!("凭据 #{} 额度已用尽（MONTHLY_REQUEST_COUNT），已被禁用", id);
-
-        // 切换到优先级最高的可用凭据
-        if let Some(next) = entries
-            .iter()
-            .filter(|e| !e.disabled)
-            .min_by_key(|e| e.credentials.priority)
-        {
-            *current_id = next.id;
-            tracing::info!(
-                "已切换到凭据 #{}（优先级 {}）",
-                next.id,
-                next.credentials.priority
-            );
-            return true;
-        }
-
-        tracing::error!("所有凭据均已禁用！");
-        false
+        has_available
     }
 
     /// 切换到优先级最高的可用凭据
@@ -994,6 +1230,7 @@ impl MultiTokenManager {
     }
 
     /// 获取使用额度信息
+    #[allow(dead_code)]
     pub async fn get_usage_limits(&self) -> anyhow::Result<UsageLimitsResponse> {
         let ctx = self.acquire_context().await?;
         get_usage_limits(
@@ -1014,6 +1251,7 @@ impl MultiTokenManager {
         let entries = self.entries.lock();
         let current_id = *self.current_id.lock();
         let available = entries.iter().filter(|e| !e.disabled).count();
+        let mode = *self.scheduling_mode.lock();
 
         ManagerSnapshot {
             entries: entries
@@ -1037,6 +1275,9 @@ impl MultiTokenManager {
             current_id,
             total: entries.len(),
             available,
+            session_cache_size: self.session_map.entry_count() as usize,
+            round_robin_counter: self.round_robin_counter.load(Ordering::Relaxed),
+            scheduling_mode: mode,
         }
     }
 
@@ -1057,6 +1298,8 @@ impl MultiTokenManager {
                 entry.disabled_reason = Some(DisabledReason::Manual);
             }
         }
+        // 凭据列表变化，重置轮询计数器确保公平性
+        self.reset_round_robin_counter();
         // 持久化更改
         self.persist_credentials()?;
         Ok(())
@@ -1114,7 +1357,13 @@ impl MultiTokenManager {
         let needs_refresh = is_token_expired(&credentials) || is_token_expiring_soon(&credentials);
 
         let token = if needs_refresh {
-            let _guard = self.refresh_lock.lock().await;
+            // 获取或创建该凭据的刷新锁（细粒度锁）
+            let lock = self
+                .refresh_locks
+                .entry(id)
+                .or_insert_with(|| Arc::new(TokioMutex::new(())))
+                .clone();
+            let _guard = lock.lock().await;
             let current_creds = {
                 let entries = self.entries.lock();
                 entries
@@ -1218,6 +1467,9 @@ impl MultiTokenManager {
         // 5. 持久化
         self.persist_credentials()?;
 
+        // 凭据列表变化，重置轮询计数器确保公平性
+        self.reset_round_robin_counter();
+
         tracing::info!("成功添加凭据 #{}", new_id);
         Ok(new_id)
     }
@@ -1281,8 +1533,49 @@ impl MultiTokenManager {
         // 持久化更改
         self.persist_credentials()?;
 
+        // 凭据列表变化，重置轮询计数器确保公平性
+        self.reset_round_robin_counter();
+
         tracing::info!("已删除凭据 #{}", id);
         Ok(())
+    }
+
+    /// 设置调度模式（Admin API）
+    ///
+    /// # Arguments
+    /// * `mode` - 新的调度模式
+    pub fn set_scheduling_mode(&self, mode: SchedulingMode) {
+        let mut current_mode = self.scheduling_mode.lock();
+        if *current_mode != mode {
+            tracing::info!(
+                "调度模式已切换: {:?} -> {:?}",
+                *current_mode,
+                mode
+            );
+            *current_mode = mode;
+        }
+    }
+
+    /// 获取当前调度模式（Admin API）
+    pub fn get_scheduling_mode(&self) -> SchedulingMode {
+        *self.scheduling_mode.lock()
+    }
+
+    /// 解析代理配置
+    ///
+    /// 优先级：凭据级 > 池级（self.proxy）> 全局
+    fn resolve_proxy_config(&self, credentials: &KiroCredentials) -> Option<ProxyConfig> {
+        // 凭据级代理优先
+        if let Some(ref proxy_url) = credentials.proxy_url {
+            return Some(ProxyConfig {
+                url: proxy_url.clone(),
+                username: credentials.proxy_username.clone(),
+                password: credentials.proxy_password.clone(),
+            });
+        }
+
+        // 回退到池级/全局代理
+        self.proxy.clone()
     }
 }
 
