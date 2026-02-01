@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1,
+    "name": "默认 API Key",
+    "key": "sk-kiro-rs-default-key-123456",
+    "description": "默认 API Key，使用默认池",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "enabled": true
+  },
+  {
+    "id": 2,
+    "name": "高级 API Key",
+    "key": "sk-kiro-rs-premium-key-789012",
+    "description": "高级 API Key，绑定到 premium 池",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "enabled": true,
+    "poolId": "premium"
+  },
+  {
+    "id": 3,
+    "name": "备用 API Key",
+    "key": "sk-kiro-rs-backup-key-345678",
+    "description": "备用 API Key，绑定到 backup 池",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "enabled": true,
+    "poolId": "backup"
+  }
+]

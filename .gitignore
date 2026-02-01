@@ -11,3 +11,7 @@
 /admin-ui/pnpm-lock.yaml
 /admin-ui/tsconfig.tsbuildinfo
 /credentials.*
+/.playwright-mcp
+/.claude
+/.cargo
+.ace-tool/
