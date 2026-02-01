@@ -1,5 +1,4 @@
-import axios from 'axios'
-import { storage } from '@/lib/storage'
+import api, { getCsrfToken, initCsrfToken } from './client'
 import type {
   CredentialsStatusResponse,
   BalanceResponse,
@@ -8,24 +7,15 @@ import type {
   SetPriorityRequest,
   AddCredentialRequest,
   AddCredentialResponse,
+  ImportCredentialsRequest,
+  ImportCredentialsResponse,
+  SchedulingMode,
+  CsrfTokenResponse,
 } from '@/types/api'
 
-// 创建 axios 实例
-const api = axios.create({
-  baseURL: '/api/admin',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
-
-// 请求拦截器添加 API Key
-api.interceptors.request.use((config) => {
-  const apiKey = storage.getApiKey()
-  if (apiKey) {
-    config.headers['x-api-key'] = apiKey
-  }
-  return config
-})
+// 导出 CSRF Token 相关函数
+export { getCsrfToken, initCsrfToken }
+export type { CsrfTokenResponse }
 
 // 获取所有凭据状态
 export async function getCredentials(): Promise<CredentialsStatusResponse> {
@@ -82,5 +72,19 @@ export async function addCredential(
 // 删除凭据
 export async function deleteCredential(id: number): Promise<SuccessResponse> {
   const { data } = await api.delete<SuccessResponse>(`/credentials/${id}`)
+  return data
+}
+
+// 批量导入凭据（支持 IdC 格式）
+export async function importCredentials(
+  req: ImportCredentialsRequest
+): Promise<ImportCredentialsResponse> {
+  const { data } = await api.post<ImportCredentialsResponse>('/credentials/import', req)
+  return data
+}
+
+// 设置调度模式
+export async function setSchedulingMode(mode: SchedulingMode): Promise<SuccessResponse> {
+  const { data } = await api.post<SuccessResponse>('/scheduling-mode', { mode })
   return data
 }
