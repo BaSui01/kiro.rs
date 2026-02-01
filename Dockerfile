@@ -28,10 +28,11 @@ VOLUME ["/app/config"]
 
 EXPOSE 8990
 
-# 配置文件说明：
-# - config.json: 主配置文件（必需）
-# - credentials.json: 凭据文件（必需）
-# - pools.json: 池配置文件（可选，用于凭据池管理）
-# - api_keys.json: API Key 配置文件（可选，用于多 API Key 管理）
+# 配置文件说明（默认路径 config/）：
+# - config/config.json: 主配置文件（必需）
+# - config/credentials.json: 凭据文件（必需）
+# - config/pools.json: 池配置文件（可选，用于凭据池管理）
+# - config/api_keys.json: API Key 配置文件（可选，用于多 API Key 管理）
 
-CMD ["./kiro-rs", "-c", "/app/config/config.json", "--credentials", "/app/config/credentials.json"]
+# 使用默认配置路径（config/config.json 和 config/credentials.json）
+CMD ["./kiro-rs"]
