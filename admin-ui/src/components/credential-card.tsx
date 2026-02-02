@@ -117,6 +117,20 @@ export function CredentialCard({ credential, onViewBalance, schedulingMode }: Cr
     return `${Math.floor(hours / 24)} 天`
   }
 
+  const formatLastCallTime = (timestamp: number) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    if (diff < 60000) return '刚刚'
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 60) return `${minutes} 分钟前`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours} 小时前`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days} 天前`
+    return date.toLocaleDateString()
+  }
+
   return (
     <>
       <Card className={isPriorityMode && credential.isCurrent ? 'ring-2 ring-primary' : ''}>
@@ -207,6 +221,72 @@ export function CredentialCard({ credential, onViewBalance, schedulingMode }: Cr
             {credential.hasProfileArn && (
               <div className="col-span-2">
                 <Badge variant="secondary">有 Profile ARN</Badge>
+              </div>
+            )}
+          </div>
+
+          {/* 调用统计 */}
+          <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">调用统计</span>
+              {credential.lastCallTime && (
+                <span className="text-muted-foreground">
+                  最后调用: {formatLastCallTime(credential.lastCallTime)}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 bg-background rounded">
+                <div className="text-lg font-bold text-green-600">{credential.successCount}</div>
+                <div className="text-xs text-muted-foreground">成功</div>
+              </div>
+              <div className="p-2 bg-background rounded">
+                <div className="text-lg font-bold text-red-500">{credential.totalFailureCount}</div>
+                <div className="text-xs text-muted-foreground">失败</div>
+              </div>
+              <div className="p-2 bg-background rounded">
+                <div className="text-lg font-bold">{credential.totalCalls}</div>
+                <div className="text-xs text-muted-foreground">总计</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span>
+                成功率:{' '}
+                <span className={credential.successRate >= 90 ? 'text-green-600' : credential.successRate >= 70 ? 'text-yellow-600' : 'text-red-500'}>
+                  {credential.successRate.toFixed(1)}%
+                </span>
+              </span>
+              {credential.avgResponseTimeMs && (
+                <span>
+                  平均响应: <span className="font-medium">{credential.avgResponseTimeMs}ms</span>
+                </span>
+              )}
+            </div>
+            {/* 今日统计 */}
+            {credential.todayTotalCalls > 0 && (
+              <div className="pt-2 border-t border-muted text-xs">
+                <span className="text-muted-foreground">今日: </span>
+                <span className="text-green-600">{credential.todaySuccessCount} 成功</span>
+                <span className="mx-1">/</span>
+                <span className="text-red-500">{credential.todayFailureCount} 失败</span>
+                <span className="mx-1">/</span>
+                <span>{credential.todayTotalCalls} 总计</span>
+              </div>
+            )}
+            {/* Token 刷新统计 */}
+            {(credential.tokenRefreshCount > 0 || credential.tokenRefreshFailureCount > 0) && (
+              <div className="pt-2 border-t border-muted text-xs">
+                <span className="text-muted-foreground">Token 刷新: </span>
+                <span className="text-green-600">{credential.tokenRefreshCount} 成功</span>
+                <span className="mx-1">/</span>
+                <span className={credential.tokenRefreshFailureCount > 0 ? 'text-red-500' : ''}>
+                  {credential.tokenRefreshFailureCount} 失败
+                </span>
+                {credential.lastTokenRefreshTime && (
+                  <span className="ml-2 text-muted-foreground">
+                    (最后: {formatLastCallTime(credential.lastTokenRefreshTime)})
+                  </span>
+                )}
               </div>
             )}
           </div>

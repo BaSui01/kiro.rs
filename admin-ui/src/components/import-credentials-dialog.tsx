@@ -54,6 +54,35 @@ export function ImportCredentialsDialog({ open, onOpenChange }: ImportCredential
     },
   })
 
+  /**
+   * 从 Kiro Account Manager 导出格式中提取凭证
+   * 支持格式：{ version, account: { credentials: { refreshToken, ... } } }
+   */
+  const extractFromKiroAccountManager = (parsed: Record<string, unknown>): IdcCredentialItem | null => {
+    // 检查是否是 Kiro Account Manager 导出格式
+    if (parsed.version && parsed.account && typeof parsed.account === 'object') {
+      const account = parsed.account as Record<string, unknown>
+      if (account.credentials && typeof account.credentials === 'object') {
+        const creds = account.credentials as Record<string, unknown>
+        // 提取必要字段
+        if (creds.refreshToken) {
+          return {
+            email: account.email as string | undefined,
+            label: (account.nickname as string) || (account.email as string) || undefined,
+            refreshToken: creds.refreshToken as string,
+            accessToken: creds.accessToken as string | undefined,
+            expiresAt: creds.expiresAt ? new Date(creds.expiresAt as number).toISOString() : undefined,
+            clientId: creds.clientId as string | undefined,
+            clientSecret: creds.clientSecret as string | undefined,
+            region: creds.region as string | undefined,
+            provider: creds.provider as string | undefined,
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
@@ -69,11 +98,26 @@ export function ImportCredentialsDialog({ open, onOpenChange }: ImportCredential
         const content = await file.text()
         const parsed = JSON.parse(content)
 
-        // 支持数组格式或单对象格式
+        // 支持数组格式
         if (Array.isArray(parsed)) {
-          allCredentials.push(...parsed)
+          for (const item of parsed) {
+            // 尝试从 Kiro Account Manager 格式提取
+            const extracted = extractFromKiroAccountManager(item)
+            if (extracted) {
+              allCredentials.push(extracted)
+            } else {
+              allCredentials.push(item)
+            }
+          }
         } else if (typeof parsed === 'object' && parsed !== null) {
-          allCredentials.push(parsed)
+          // 尝试从 Kiro Account Manager 格式提取
+          const extracted = extractFromKiroAccountManager(parsed)
+          if (extracted) {
+            allCredentials.push(extracted)
+          } else {
+            // 直接作为凭证格式
+            allCredentials.push(parsed)
+          }
         }
       } catch (err) {
         setParseError(`解析文件 ${file.name} 失败: ${(err as Error).message}`)
