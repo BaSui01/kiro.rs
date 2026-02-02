@@ -162,7 +162,13 @@ async fn main() {
             tracing::warn!("admin_api_key 配置为空，Admin API 未启用");
             anthropic_app
         } else {
-            let admin_service = admin::AdminService::new(token_manager.clone());
+            let mut admin_service = admin::AdminService::new(token_manager.clone());
+
+            // 如果池管理器初始化成功，添加到 AdminService
+            if let Some(ref pm) = pool_manager {
+                admin_service = admin_service.with_pool_manager(pm.clone());
+            }
+
             let mut admin_state = admin::AdminState::new(
                 admin_key,
                 admin_service,

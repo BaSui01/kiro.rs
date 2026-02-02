@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::MultiTokenManager;
+use crate::kiro::pool_manager::PoolManager;
 
 use super::error::AdminServiceError;
 use super::types::{
@@ -17,16 +18,38 @@ use crate::kiro::token_manager::SchedulingMode;
 /// 封装所有 Admin API 的业务逻辑
 pub struct AdminService {
     token_manager: Arc<MultiTokenManager>,
+    pool_manager: Option<Arc<PoolManager>>,
 }
 
 impl AdminService {
     pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
-        Self { token_manager }
+        Self {
+            token_manager,
+            pool_manager: None,
+        }
+    }
+
+    /// 设置池管理器
+    pub fn with_pool_manager(mut self, pool_manager: Arc<PoolManager>) -> Self {
+        self.pool_manager = Some(pool_manager);
+        self
     }
 
     /// 获取所有凭据状态
     pub fn get_all_credentials(&self) -> CredentialsStatusResponse {
-        let snapshot = self.token_manager.snapshot();
+        // 如果有池管理器，从默认池获取凭证
+        let snapshot = if let Some(ref pool_manager) = self.pool_manager {
+            if let Some(default_pool) = pool_manager.get_default_pool() {
+                default_pool.token_manager.snapshot()
+            } else {
+                // 默认池不存在，返回空快照
+                tracing::warn!("默认池不存在，返回空凭证列表");
+                self.token_manager.snapshot()
+            }
+        } else {
+            // 没有池管理器，使用原来的 token_manager（兼容旧版本）
+            self.token_manager.snapshot()
+        };
 
         let mut credentials: Vec<CredentialStatusItem> = snapshot
             .entries
