@@ -13,6 +13,8 @@ export interface DashboardState {
   selectedCredentialId: number | null
   editingPool: PoolStatusItem | null
   expandedPools: Set<string>
+  /** 导入凭据时的目标池ID */
+  importTargetPoolId: string
 }
 
 export interface DashboardStateActions {
@@ -21,7 +23,8 @@ export interface DashboardStateActions {
   closeBalanceDialog: () => void
   openAddCredentialDialog: () => void
   closeAddCredentialDialog: () => void
-  openImportCredentialsDialog: () => void
+  /** 打开导入凭据对话框，可指定目标池ID */
+  openImportCredentialsDialog: (targetPoolId?: string) => void
   closeImportCredentialsDialog: () => void
   openPoolDialog: (pool?: PoolStatusItem) => void
   closePoolDialog: () => void
@@ -42,6 +45,7 @@ export function useDashboardState(): DashboardState & DashboardStateActions {
   const [selectedCredentialId, setSelectedCredentialId] = useState<number | null>(null)
   const [editingPool, setEditingPool] = useState<PoolStatusItem | null>(null)
   const [expandedPools, setExpandedPools] = useState<Set<string>>(new Set(['default']))
+  const [importTargetPoolId, setImportTargetPoolId] = useState<string>('default') // 导入目标池ID 🎯
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return document.documentElement.classList.contains('dark')
@@ -67,7 +71,9 @@ export function useDashboardState(): DashboardState & DashboardStateActions {
     setDialogs((prev) => ({ ...prev, addCredential: false }))
   }, [])
 
-  const openImportCredentialsDialog = useCallback(() => {
+  const openImportCredentialsDialog = useCallback((targetPoolId?: string) => {
+    // 如果指定了目标池ID，就用它；否则默认为 'default' 🎯
+    setImportTargetPoolId(targetPoolId || 'default')
     setDialogs((prev) => ({ ...prev, importCredentials: true }))
   }, [])
 
@@ -113,6 +119,7 @@ export function useDashboardState(): DashboardState & DashboardStateActions {
     editingPool,
     expandedPools,
     darkMode,
+    importTargetPoolId, // 新增：导入目标池ID 🎯
     // Actions
     openBalanceDialog,
     closeBalanceDialog,

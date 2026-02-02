@@ -43,7 +43,8 @@ export interface PoolItemProps {
   credentials: CredentialStatusItem[];
   onViewBalance: (id: number) => void;
   onAddCredential: () => void;
-  onImportCredentials: () => void;
+  /** 导入凭据，传入目标池ID */
+  onImportCredentials: (targetPoolId: string) => void;
   // 新增：获取池凭证列表的方法
   fetchPoolCredentials?: (poolId: string) => Promise<PoolCredentialsResponse>;
   // 新增：转移凭证的方法
@@ -84,24 +85,26 @@ export function PoolItem({
   const [credentialsLoaded, setCredentialsLoaded] = useState(false);
 
   // 转移凭证状态
-  const [transferringId, setTransferringId] = useState<number | null>(null);
+  const [transferringId, setTransferringId] = useState<number | null>(null); // 正在转移中的凭证ID
+  const [selectedCredentialId, setSelectedCredentialId] = useState<number | null>(null); // 当前选择目标池的凭证ID
   const [selectedTargetPool, setSelectedTargetPool] = useState<string>("");
 
   // 当展开非默认池时，加载凭证列表
   useEffect(() => {
     if (expanded && !isDefault && !credentialsLoaded && fetchPoolCredentials) {
-      setLoadingCredentials(true);
-      fetchPoolCredentials(pool.id)
-        .then((response) => {
+      const loadCredentials = async () => {
+        setLoadingCredentials(true);
+        try {
+          const response = await fetchPoolCredentials(pool.id);
           setPoolCredentials(response.credentials);
           setCredentialsLoaded(true);
-        })
-        .catch((err) => {
-          toast.error(`加载凭证列表失败: ${err.message}`);
-        })
-        .finally(() => {
+        } catch (err) {
+          toast.error(`加载凭证列表失败: ${(err as Error).message}`);
+        } finally {
           setLoadingCredentials(false);
-        });
+        }
+      };
+      loadCredentials();
     }
   }, [expanded, isDefault, credentialsLoaded, fetchPoolCredentials, pool.id]);
 
@@ -116,13 +119,18 @@ export function PoolItem({
   const handleTransfer = async (credentialId: number) => {
     if (!selectedTargetPool || !onTransferCredential) return;
 
-    setTransferringId(credentialId);
+    setTransferringId(credentialId); // 开始转移时才设置
     try {
       await onTransferCredential(credentialId, selectedTargetPool);
       toast.success(`凭证 #${credentialId} 已转移到池 ${selectedTargetPool}`);
-      // 重新加载凭证列表
-      setCredentialsLoaded(false);
+
+      // 非默认池：直接从本地状态移除已转移的凭证
+      // 默认池：父组件会通过 refetchCredentials 刷新 credentials prop
+      if (!isDefault) {
+        setPoolCredentials(prev => prev.filter(c => c.id !== credentialId));
+      }
       setSelectedTargetPool("");
+      setSelectedCredentialId(null);
     } catch (err) {
       toast.error(`转移失败: ${(err as Error).message}`);
     } finally {
@@ -245,20 +253,21 @@ export function PoolItem({
               <Shield className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">凭据列表</span>
               <Badge variant="secondary" className="text-xs">
-                {isDefault ? credentials.length : pool.totalCredentials} 个
+                {displayCredentials.length} 个
               </Badge>
             </div>
-            {isDefault && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={onImportCredentials}
-                  size="sm"
-                  variant="outline"
-                  className="rounded-lg"
-                >
-                  <Upload className="h-4 w-4 mr-1.5" />
-                  导入
-                </Button>
+            {/* 所有池都显示导入按钮，默认池额外显示添加按钮 */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => onImportCredentials(pool.id)}
+                size="sm"
+                variant="outline"
+                className="rounded-lg"
+              >
+                <Upload className="h-4 w-4 mr-1.5" />
+                导入
+              </Button>
+              {isDefault && (
                 <Button
                   onClick={onAddCredential}
                   size="sm"
@@ -267,8 +276,8 @@ export function PoolItem({
                   <Plus className="h-4 w-4 mr-1.5" />
                   添加
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* 加载中状态 */}
@@ -309,14 +318,15 @@ export function PoolItem({
                           <ArrowRightLeft className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           <Select
                             value={
-                              transferringId === credential.id
+                              selectedCredentialId === credential.id
                                 ? selectedTargetPool
                                 : ""
                             }
                             onValueChange={(value) => {
-                              setTransferringId(credential.id);
+                              setSelectedCredentialId(credential.id);
                               setSelectedTargetPool(value);
                             }}
+                            disabled={transferringId === credential.id}
                           >
                             <SelectTrigger className="h-8 text-xs flex-1">
                               <SelectValue placeholder="转移到..." />
@@ -334,14 +344,13 @@ export function PoolItem({
                             variant="outline"
                             className="h-8 px-2"
                             disabled={
-                              transferringId !== credential.id ||
+                              selectedCredentialId !== credential.id ||
                               !selectedTargetPool ||
-                              transferringId === null
+                              transferringId !== null
                             }
                             onClick={() => handleTransfer(credential.id)}
                           >
-                            {transferringId === credential.id &&
-                            selectedTargetPool ? (
+                            {transferringId === credential.id ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               "转移"

@@ -15,16 +15,21 @@ export function usePools() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
+  // silent: 静默刷新，不显示 loading 状态（用于后台更新）
+  const refresh = useCallback(async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      }
       setError(null)
       const response = await fetchPools()
       setPools(response.pools)
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取池列表失败')
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -52,9 +57,10 @@ export function usePools() {
     await refresh()
   }, [refresh])
 
+  // 转移凭证后静默刷新，避免 UI 闪烁
   const assignCredentialToPool = useCallback(async (credentialId: number, poolId: string) => {
     await apiAssignCredentialToPool(credentialId, { poolId })
-    await refresh()
+    await refresh(true) // 静默刷新
   }, [refresh])
 
   const fetchPoolCredentials = useCallback(async (poolId: string): Promise<PoolCredentialsResponse> => {

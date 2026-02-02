@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Upload, FileJson, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -24,17 +24,27 @@ import type { IdcCredentialItem, ImportCredentialsResponse } from '@/types/api'
 interface ImportCredentialsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** 默认选中的池ID，用于从特定池触发导入时预选目标池 */
+  defaultPoolId?: string
 }
 
-export function ImportCredentialsDialog({ open, onOpenChange }: ImportCredentialsDialogProps) {
+export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'default' }: ImportCredentialsDialogProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [parsedCredentials, setParsedCredentials] = useState<IdcCredentialItem[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<ImportCredentialsResponse | null>(null)
-  const [selectedPoolId, setSelectedPoolId] = useState<string>('default') // 默认选择 default 池
+  const [selectedPoolId, setSelectedPoolId] = useState<string>(defaultPoolId) // 使用传入的默认池ID
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { pools } = usePools()
+
+  // 当对话框打开时，同步 defaultPoolId 到 selectedPoolId
+  // 这样从不同池触发导入时，会自动选中对应的池 🎯
+  useEffect(() => {
+    if (open) {
+      setSelectedPoolId(defaultPoolId)
+    }
+  }, [open, defaultPoolId])
 
   const importMutation = useMutation({
     mutationFn: importCredentials,
@@ -145,7 +155,7 @@ export function ImportCredentialsDialog({ open, onOpenChange }: ImportCredential
     setParsedCredentials([])
     setParseError(null)
     setImportResult(null)
-    setSelectedPoolId('default')
+    setSelectedPoolId(defaultPoolId) // 重置为传入的默认池ID，而不是硬编码 'default'
     onOpenChange(false)
   }
 

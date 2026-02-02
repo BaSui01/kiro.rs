@@ -51,6 +51,7 @@ export function UnifiedDashboard({
     editingPool,
     expandedPools,
     darkMode,
+    importTargetPoolId, // 新增：导入目标池ID 🎯
     openBalanceDialog,
     closeBalanceDialog,
     openAddCredentialDialog,
@@ -212,6 +213,7 @@ export function UnifiedDashboard({
       <ImportCredentialsDialog
         open={dialogs.importCredentials}
         onOpenChange={(open) => !open && closeImportCredentialsDialog()}
+        defaultPoolId={importTargetPoolId}
       />
 
       {/* 池对话框 */}

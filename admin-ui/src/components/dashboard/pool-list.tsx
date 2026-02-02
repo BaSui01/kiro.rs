@@ -18,7 +18,8 @@ export interface PoolListProps {
   defaultPoolCredentials: CredentialStatusItem[];
   onViewBalance: (id: number) => void;
   onAddCredential: () => void;
-  onImportCredentials: () => void;
+  /** 导入凭据，传入目标池ID */
+  onImportCredentials: (targetPoolId: string) => void;
   // 新增：获取池凭证列表的方法
   fetchPoolCredentials?: (poolId: string) => Promise<PoolCredentialsResponse>;
   // 新增：转移凭证的方法
