@@ -138,8 +138,8 @@ export function UnifiedDashboard({
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30">
         <div className="text-center">
           <div className="relative">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-muted border-t-violet-500 mx-auto mb-4"></div>
-            <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-purple-500/30 animate-ping mx-auto"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-muted border-t-primary mx-auto mb-4"></div>
+            <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-primary/30 animate-ping mx-auto"></div>
           </div>
           <p className="text-muted-foreground font-medium">加载中...</p>
         </div>
