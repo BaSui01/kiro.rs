@@ -376,6 +376,24 @@ pub struct PoolStatusItem {
     pub round_robin_counter: u64,
 }
 
+/// 池凭证列表响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoolCredentialsResponse {
+    /// 池 ID
+    pub pool_id: String,
+    /// 凭据总数
+    pub total: usize,
+    /// 可用凭据数量
+    pub available: usize,
+    /// 当前活跃凭据 ID
+    pub current_id: u64,
+    /// 凭据列表
+    pub credentials: Vec<CredentialStatusItem>,
+    /// 调度模式
+    pub scheduling_mode: SchedulingMode,
+}
+
 /// 创建池请求
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

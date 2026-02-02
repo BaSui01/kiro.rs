@@ -16,8 +16,9 @@ use crate::kiro::pool_manager::UpdatePoolRequest as PoolUpdateRequest;
 use super::{
     middleware::AdminState,
     types::{
-        AdminErrorResponse, AssignCredentialToPoolRequest, CreatePoolRequest, PoolStatusItem,
-        PoolsListResponse, SetPoolDisabledRequest, SuccessResponse, UpdatePoolRequest,
+        AdminErrorResponse, AssignCredentialToPoolRequest, CreatePoolRequest, CredentialStatusItem,
+        PoolCredentialsResponse, PoolStatusItem, PoolsListResponse, SetPoolDisabledRequest,
+        SuccessResponse, UpdatePoolRequest,
     },
 };
 
@@ -273,6 +274,60 @@ pub async fn assign_credential_to_pool(
             )))
             .into_response(),
             Err(e) => pool_error_to_response(e),
+        },
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(AdminErrorResponse::api_error("池管理器未初始化")),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/admin/pools/:id/credentials
+/// 获取池的凭证列表
+pub async fn get_pool_credentials(
+    State(state): State<AdminState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match &state.pool_manager {
+        Some(pm) => match pm.get_pool(&id) {
+            Some(pool) => {
+                let snapshot = pool.token_manager.snapshot();
+                let current_id = snapshot.current_id;
+
+                let mut credentials: Vec<CredentialStatusItem> = snapshot
+                    .entries
+                    .into_iter()
+                    .map(|entry| CredentialStatusItem {
+                        id: entry.id,
+                        priority: entry.priority,
+                        disabled: entry.disabled,
+                        failure_count: entry.failure_count,
+                        is_current: entry.id == current_id,
+                        expires_at: entry.expires_at,
+                        auth_method: entry.auth_method,
+                        has_profile_arn: entry.has_profile_arn,
+                    })
+                    .collect();
+
+                // 按优先级排序
+                credentials.sort_by_key(|c| c.priority);
+
+                Json(PoolCredentialsResponse {
+                    pool_id: id,
+                    total: snapshot.total,
+                    available: snapshot.available,
+                    current_id,
+                    credentials,
+                    scheduling_mode: snapshot.scheduling_mode,
+                })
+                .into_response()
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(AdminErrorResponse::not_found(format!("池不存在: {}", id))),
+            )
+                .into_response(),
         },
         None => (
             StatusCode::SERVICE_UNAVAILABLE,

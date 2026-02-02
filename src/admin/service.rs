@@ -139,6 +139,14 @@ impl AdminService {
             proxy_url: req.proxy_url,
             proxy_username: req.proxy_username,
             proxy_password: req.proxy_password,
+            // 统计字段（新凭据初始化为 0）
+            success_count: 0,
+            total_failure_count: 0,
+            last_call_time: None,
+            total_response_time_ms: 0,
+            token_refresh_count: 0,
+            token_refresh_failure_count: 0,
+            last_token_refresh_time: None,
         };
 
         // 调用 token_manager 添加凭据
@@ -210,6 +218,14 @@ impl AdminService {
                 proxy_url: None,
                 proxy_username: None,
                 proxy_password: None,
+                // 统计字段（新凭据初始化为 0）
+                success_count: 0,
+                total_failure_count: 0,
+                last_call_time: None,
+                total_response_time_ms: 0,
+                token_refresh_count: 0,
+                token_refresh_failure_count: 0,
+                last_token_refresh_time: None,
             };
 
             // 尝试添加凭据
