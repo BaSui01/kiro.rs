@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   kiro-rs:
-    image: ghcr.io/basui01/kiro.rs:v2026.2.5-amd64
+    image: ghcr.io/basui01/kiro.rs:latest
     container_name: kiro-rs
     restart: unless-stopped
     ports:
