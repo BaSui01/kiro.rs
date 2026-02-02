@@ -16,7 +16,7 @@ use super::{
     middleware::{AdminState, admin_auth_middleware, csrf_middleware},
     pool_handlers::{
         assign_credential_to_pool, create_pool, delete_pool, get_all_pools, get_pool,
-        set_pool_disabled, update_pool,
+        get_pool_credentials, set_pool_disabled, update_pool,
     },
 };
 
@@ -48,6 +48,7 @@ use super::{
 /// - `PUT /pools/:id` - 更新池配置
 /// - `DELETE /pools/:id` - 删除池
 /// - `POST /pools/:id/disabled` - 设置池禁用状态
+/// - `GET /pools/:id/credentials` - 获取池的凭证列表
 ///
 /// ## 配置管理
 /// - `GET /config` - 获取当前配置
@@ -90,6 +91,7 @@ pub fn create_admin_router(state: AdminState) -> Router {
             get(get_pool).put(update_pool).delete(delete_pool),
         )
         .route("/pools/{id}/disabled", post(set_pool_disabled))
+        .route("/pools/{id}/credentials", get(get_pool_credentials))
         // 配置管理
         .route("/config", get(get_config).put(update_config))
         // API Key 管理

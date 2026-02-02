@@ -7,6 +7,7 @@ import type {
   SetPoolDisabledRequest,
   AssignCredentialToPoolRequest,
   SuccessResponse,
+  PoolCredentialsResponse,
 } from '@/types/api'
 
 // 获取所有池
@@ -18,6 +19,12 @@ export async function fetchPools(): Promise<PoolsListResponse> {
 // 获取单个池详情
 export async function fetchPool(poolId: string): Promise<PoolStatusItem> {
   const { data } = await api.get<PoolStatusItem>(`/pools/${encodeURIComponent(poolId)}`)
+  return data
+}
+
+// 获取池的凭证列表
+export async function fetchPoolCredentials(poolId: string): Promise<PoolCredentialsResponse> {
+  const { data } = await api.get<PoolCredentialsResponse>(`/pools/${encodeURIComponent(poolId)}/credentials`)
   return data
 }
 

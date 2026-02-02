@@ -291,7 +291,8 @@ impl KiroProvider {
                 }
             };
 
-            // 发送请求
+            // 发送请求（记录开始时间用于统计响应时间）
+            let request_start = std::time::Instant::now();
             let response = match self
                 .client
                 .post(&url)
@@ -320,7 +321,10 @@ impl KiroProvider {
 
             // 成功响应
             if status.is_success() {
-                self.token_manager.report_success(ctx.id);
+                // 计算响应时间并上报
+                let response_time_ms = request_start.elapsed().as_millis() as u64;
+                self.token_manager
+                    .report_success_with_time(ctx.id, Some(response_time_ms));
                 return Ok(response);
             }
 
@@ -429,7 +433,8 @@ impl KiroProvider {
                 }
             };
 
-            // 发送请求
+            // 发送请求（记录开始时间用于统计响应时间）
+            let request_start = std::time::Instant::now();
             let response = match self
                 .client
                 .post(&url)
@@ -460,7 +465,10 @@ impl KiroProvider {
 
             // 成功响应
             if status.is_success() {
-                self.token_manager.report_success(ctx.id);
+                // 计算响应时间并上报
+                let response_time_ms = request_start.elapsed().as_millis() as u64;
+                self.token_manager
+                    .report_success_with_time(ctx.id, Some(response_time_ms));
                 return Ok(response);
             }
 

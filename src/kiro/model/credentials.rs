@@ -75,10 +75,52 @@ pub struct KiroCredentials {
     /// 凭据级代理密码
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
+
+    // ============ 调用统计（持久化） ============
+
+    /// 成功调用次数（总计）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub success_count: u64,
+
+    /// 失败调用次数（总计）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub total_failure_count: u64,
+
+    /// 最后调用时间（Unix 时间戳毫秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_call_time: Option<u64>,
+
+    /// 累计响应时间（毫秒，用于计算平均值）
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub total_response_time_ms: u64,
+
+    // ============ Token 刷新统计（持久化） ============
+
+    /// Token 刷新成功次数
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub token_refresh_count: u64,
+
+    /// Token 刷新失败次数
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_zero_u64")]
+    pub token_refresh_failure_count: u64,
+
+    /// 最后 Token 刷新时间（Unix 时间戳毫秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_token_refresh_time: Option<u64>,
 }
 
 /// 判断是否为零（用于跳过序列化）
 fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+/// 判断 u64 是否为零（用于跳过序列化）
+fn is_zero_u64(value: &u64) -> bool {
     *value == 0
 }
 

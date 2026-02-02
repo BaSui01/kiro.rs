@@ -396,6 +396,28 @@ struct CredentialEntry {
     disabled: bool,
     /// 禁用原因（用于区分手动禁用 vs 自动禁用，便于自愈）
     disabled_reason: Option<DisabledReason>,
+    // ============ 调用统计字段 ============
+    /// 成功调用次数（总计）
+    success_count: u64,
+    /// 失败调用次数（总计，包括已重置的连续失败）
+    total_failure_count: u64,
+    /// 最后调用时间（Unix 时间戳毫秒）
+    last_call_time: Option<u64>,
+    /// 累计响应时间（毫秒，用于计算平均值）
+    total_response_time_ms: u64,
+    /// 今日成功调用次数
+    today_success_count: u64,
+    /// 今日失败调用次数
+    today_failure_count: u64,
+    /// 今日日期（用于重置今日统计）
+    today_date: Option<String>,
+    // ============ Token 刷新统计字段 ============
+    /// Token 刷新成功次数
+    token_refresh_count: u64,
+    /// Token 刷新失败次数
+    token_refresh_failure_count: u64,
+    /// 最后 Token 刷新时间（Unix 时间戳毫秒）
+    last_token_refresh_time: Option<u64>,
 }
 
 /// 禁用原因
@@ -433,6 +455,32 @@ pub struct CredentialEntrySnapshot {
     pub has_profile_arn: bool,
     /// Token 过期时间
     pub expires_at: Option<String>,
+    // ============ 调用统计字段 ============
+    /// 成功调用次数（总计）
+    pub success_count: u64,
+    /// 失败调用次数（总计）
+    pub total_failure_count: u64,
+    /// 总调用次数
+    pub total_calls: u64,
+    /// 成功率（百分比，0-100）
+    pub success_rate: f64,
+    /// 最后调用时间（Unix 时间戳毫秒）
+    pub last_call_time: Option<u64>,
+    /// 平均响应时间（毫秒）
+    pub avg_response_time_ms: Option<u64>,
+    /// 今日成功调用次数
+    pub today_success_count: u64,
+    /// 今日失败调用次数
+    pub today_failure_count: u64,
+    /// 今日总调用次数
+    pub today_total_calls: u64,
+    // ============ Token 刷新统计字段 ============
+    /// Token 刷新成功次数
+    pub token_refresh_count: u64,
+    /// Token 刷新失败次数
+    pub token_refresh_failure_count: u64,
+    /// 最后 Token 刷新时间（Unix 时间戳毫秒）
+    pub last_token_refresh_time: Option<u64>,
 }
 
 /// 凭据管理器状态快照
@@ -494,6 +542,8 @@ pub struct MultiTokenManager {
     round_robin_counter: AtomicU64,
     /// 调度模式
     scheduling_mode: Mutex<SchedulingMode>,
+    /// 上次统计持久化时间（Unix 时间戳秒）
+    last_stats_persist_time: AtomicU64,
 }
 
 /// 会话缓存配置
@@ -503,6 +553,9 @@ const SESSION_CACHE_TTL_SECS: u64 = 3600;
 
 /// 每个凭据最大 API 调用失败次数
 const MAX_FAILURES_PER_CREDENTIAL: u32 = 3;
+
+/// 统计数据持久化间隔（秒）- 5 分钟
+const STATS_PERSIST_INTERVAL_SECS: u64 = 300;
 
 /// API 调用上下文
 ///
@@ -603,6 +656,19 @@ impl MultiTokenManager {
                 }
                 CredentialEntry {
                     id,
+                    // 从持久化数据加载统计
+                    success_count: cred.success_count,
+                    total_failure_count: cred.total_failure_count,
+                    last_call_time: cred.last_call_time,
+                    total_response_time_ms: cred.total_response_time_ms,
+                    token_refresh_count: cred.token_refresh_count,
+                    token_refresh_failure_count: cred.token_refresh_failure_count,
+                    last_token_refresh_time: cred.last_token_refresh_time,
+                    // 今日统计不持久化，每次启动重置
+                    today_success_count: 0,
+                    today_failure_count: 0,
+                    today_date: None,
+                    // 运行时状态
                     credentials: cred,
                     failure_count: 0,
                     disabled: false,
@@ -681,6 +747,13 @@ impl MultiTokenManager {
             session_map,
             round_robin_counter: AtomicU64::new(0),
             scheduling_mode: Mutex::new(SchedulingMode::default()),
+            // 初始化为当前时间，避免启动后立即触发持久化
+            last_stats_persist_time: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+            ),
         };
 
         // 如果有新分配的 ID 或新生成的 machineId，立即持久化到配置文件
@@ -1044,27 +1117,41 @@ impl MultiTokenManager {
 
             if is_token_expired(&current_creds) || is_token_expiring_soon(&current_creds) {
                 // 确实需要刷新
-                let new_creds =
-                    refresh_token(&current_creds, &self.config, self.proxy.as_ref()).await?;
+                let refresh_result =
+                    refresh_token(&current_creds, &self.config, self.proxy.as_ref()).await;
 
-                if is_token_expired(&new_creds) {
-                    anyhow::bail!("刷新后的 Token 仍然无效或已过期");
-                }
+                match refresh_result {
+                    Ok(new_creds) => {
+                        if is_token_expired(&new_creds) {
+                            // 刷新后仍然无效，记录失败
+                            self.report_token_refresh_failure(id);
+                            anyhow::bail!("刷新后的 Token 仍然无效或已过期");
+                        }
 
-                // 更新凭据
-                {
-                    let mut entries = self.entries.lock();
-                    if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
-                        entry.credentials = new_creds.clone();
+                        // 记录刷新成功
+                        self.report_token_refresh_success(id);
+
+                        // 更新凭据
+                        {
+                            let mut entries = self.entries.lock();
+                            if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+                                entry.credentials = new_creds.clone();
+                            }
+                        }
+
+                        // 回写凭据到文件（仅多凭据格式），失败只记录警告
+                        if let Err(e) = self.persist_credentials() {
+                            tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                        }
+
+                        new_creds
+                    }
+                    Err(e) => {
+                        // 记录刷新失败
+                        self.report_token_refresh_failure(id);
+                        return Err(e);
                     }
                 }
-
-                // 回写凭据到文件（仅多凭据格式），失败只记录警告
-                if let Err(e) = self.persist_credentials() {
-                    tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
-                }
-
-                new_creds
             } else {
                 // 其他请求已经完成刷新，直接使用新凭据
                 tracing::debug!("Token 已被其他请求刷新，跳过刷新");
@@ -1108,7 +1195,7 @@ impl MultiTokenManager {
             None => return Ok(false),
         };
 
-        // 收集所有凭据
+        // 收集所有凭据，同步统计数据
         let credentials: Vec<KiroCredentials> = {
             let entries = self.entries.lock();
             entries
@@ -1116,6 +1203,14 @@ impl MultiTokenManager {
                 .map(|e| {
                     let mut cred = e.credentials.clone();
                     cred.canonicalize_auth_method();
+                    // 同步统计数据到 KiroCredentials
+                    cred.success_count = e.success_count;
+                    cred.total_failure_count = e.total_failure_count;
+                    cred.last_call_time = e.last_call_time;
+                    cred.total_response_time_ms = e.total_response_time_ms;
+                    cred.token_refresh_count = e.token_refresh_count;
+                    cred.token_refresh_failure_count = e.token_refresh_failure_count;
+                    cred.last_token_refresh_time = e.last_token_refresh_time;
                     cred
                 })
                 .collect()
@@ -1136,18 +1231,90 @@ impl MultiTokenManager {
         Ok(true)
     }
 
+    /// 检查是否需要定期持久化统计数据
+    ///
+    /// 每隔 STATS_PERSIST_INTERVAL_SECS 秒自动持久化一次统计数据
+    /// 避免程序异常退出时丢失统计信息
+    fn maybe_persist_stats(&self) {
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let last_persist = self.last_stats_persist_time.load(Ordering::Relaxed);
+
+        // 检查是否超过持久化间隔
+        if now_secs >= last_persist + STATS_PERSIST_INTERVAL_SECS {
+            // 使用 CAS 操作避免并发重复持久化
+            if self
+                .last_stats_persist_time
+                .compare_exchange(last_persist, now_secs, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
+                // 成功获取持久化权限，执行持久化
+                if let Err(e) = self.persist_credentials() {
+                    tracing::warn!("定期持久化统计数据失败: {}", e);
+                } else {
+                    tracing::debug!("已定期持久化统计数据");
+                }
+            }
+            // 如果 CAS 失败，说明其他线程已经在持久化，跳过
+        }
+    }
+
     /// 报告指定凭据 API 调用成功
     ///
-    /// 重置该凭据的失败计数
+    /// 重置该凭据的失败计数，并更新调用统计
     ///
     /// # Arguments
     /// * `id` - 凭据 ID（来自 CallContext）
+    /// * `response_time_ms` - 响应时间（毫秒），可选
+    #[allow(dead_code)]
     pub fn report_success(&self, id: u64) {
-        let mut entries = self.entries.lock();
-        if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
-            entry.failure_count = 0;
-            tracing::debug!("凭据 #{} API 调用成功", id);
+        self.report_success_with_time(id, None);
+    }
+
+    /// 报告指定凭据 API 调用成功（带响应时间）
+    ///
+    /// # Arguments
+    /// * `id` - 凭据 ID（来自 CallContext）
+    /// * `response_time_ms` - 响应时间（毫秒），可选
+    pub fn report_success_with_time(&self, id: u64, response_time_ms: Option<u64>) {
+        {
+            let mut entries = self.entries.lock();
+            if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+                entry.failure_count = 0;
+                entry.success_count += 1;
+
+                // 更新最后调用时间
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                entry.last_call_time = Some(now);
+
+                // 更新响应时间统计
+                if let Some(time_ms) = response_time_ms {
+                    entry.total_response_time_ms += time_ms;
+                }
+
+                // 更新今日统计
+                let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+                if entry.today_date.as_ref() != Some(&today) {
+                    // 新的一天，重置今日统计
+                    entry.today_date = Some(today);
+                    entry.today_success_count = 1;
+                    entry.today_failure_count = 0;
+                } else {
+                    entry.today_success_count += 1;
+                }
+
+                tracing::debug!("凭据 #{} API 调用成功（总计: {}）", id, entry.success_count);
+            }
         }
+
+        // 检查是否需要定期持久化统计数据
+        self.maybe_persist_stats();
     }
 
     /// 报告指定凭据 API 调用失败
@@ -1171,13 +1338,33 @@ impl MultiTokenManager {
             };
 
             entry.failure_count += 1;
+            entry.total_failure_count += 1; // 更新总失败计数
             let failure_count = entry.failure_count;
 
+            // 更新最后调用时间
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            entry.last_call_time = Some(now);
+
+            // 更新今日统计
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            if entry.today_date.as_ref() != Some(&today) {
+                // 新的一天，重置今日统计
+                entry.today_date = Some(today);
+                entry.today_success_count = 0;
+                entry.today_failure_count = 1;
+            } else {
+                entry.today_failure_count += 1;
+            }
+
             tracing::warn!(
-                "凭据 #{} API 调用失败（{}/{}）",
+                "凭据 #{} API 调用失败（{}/{}，总失败: {}）",
                 id,
                 failure_count,
-                MAX_FAILURES_PER_CREDENTIAL
+                MAX_FAILURES_PER_CREDENTIAL,
+                entry.total_failure_count
             );
 
             if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
@@ -1213,6 +1400,9 @@ impl MultiTokenManager {
         if should_reset_counter {
             self.reset_round_robin_counter();
         }
+
+        // 检查是否需要定期持久化统计数据
+        self.maybe_persist_stats();
 
         has_available
     }
@@ -1271,6 +1461,52 @@ impl MultiTokenManager {
         has_available
     }
 
+    /// 报告 Token 刷新成功
+    ///
+    /// 更新 Token 刷新统计
+    ///
+    /// # Arguments
+    /// * `id` - 凭据 ID
+    fn report_token_refresh_success(&self, id: u64) {
+        let mut entries = self.entries.lock();
+        if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+            entry.token_refresh_count += 1;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            entry.last_token_refresh_time = Some(now);
+            tracing::debug!(
+                "凭据 #{} Token 刷新成功（总计: {}）",
+                id,
+                entry.token_refresh_count
+            );
+        }
+    }
+
+    /// 报告 Token 刷新失败
+    ///
+    /// 更新 Token 刷新失败统计
+    ///
+    /// # Arguments
+    /// * `id` - 凭据 ID
+    fn report_token_refresh_failure(&self, id: u64) {
+        let mut entries = self.entries.lock();
+        if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+            entry.token_refresh_failure_count += 1;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            entry.last_token_refresh_time = Some(now);
+            tracing::warn!(
+                "凭据 #{} Token 刷新失败（总失败: {}）",
+                id,
+                entry.token_refresh_failure_count
+            );
+        }
+    }
+
     /// 切换到优先级最高的可用凭据
     ///
     /// 返回是否成功切换
@@ -1320,24 +1556,62 @@ impl MultiTokenManager {
         let current_id = *self.current_id.lock();
         let available = entries.iter().filter(|e| !e.disabled).count();
         let mode = *self.scheduling_mode.lock();
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         ManagerSnapshot {
             entries: entries
                 .iter()
-                .map(|e| CredentialEntrySnapshot {
-                    id: e.id,
-                    priority: e.credentials.priority,
-                    disabled: e.disabled,
-                    failure_count: e.failure_count,
-                    auth_method: e.credentials.auth_method.as_deref().map(|m| {
-                        if m.eq_ignore_ascii_case("builder-id") || m.eq_ignore_ascii_case("iam") {
-                            "idc".to_string()
+                .map(|e| {
+                    let total_calls = e.success_count + e.total_failure_count;
+                    let success_rate = if total_calls > 0 {
+                        (e.success_count as f64 / total_calls as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let avg_response_time_ms = if e.success_count > 0 {
+                        Some(e.total_response_time_ms / e.success_count)
+                    } else {
+                        None
+                    };
+
+                    // 检查今日统计是否需要重置
+                    let (today_success, today_failure) =
+                        if e.today_date.as_ref() == Some(&today) {
+                            (e.today_success_count, e.today_failure_count)
                         } else {
-                            m.to_string()
-                        }
-                    }),
-                    has_profile_arn: e.credentials.profile_arn.is_some(),
-                    expires_at: e.credentials.expires_at.clone(),
+                            (0, 0)
+                        };
+
+                    CredentialEntrySnapshot {
+                        id: e.id,
+                        priority: e.credentials.priority,
+                        disabled: e.disabled,
+                        failure_count: e.failure_count,
+                        auth_method: e.credentials.auth_method.as_deref().map(|m| {
+                            if m.eq_ignore_ascii_case("builder-id") || m.eq_ignore_ascii_case("iam")
+                            {
+                                "idc".to_string()
+                            } else {
+                                m.to_string()
+                            }
+                        }),
+                        has_profile_arn: e.credentials.profile_arn.is_some(),
+                        expires_at: e.credentials.expires_at.clone(),
+                        // 调用统计字段
+                        success_count: e.success_count,
+                        total_failure_count: e.total_failure_count,
+                        total_calls,
+                        success_rate,
+                        last_call_time: e.last_call_time,
+                        avg_response_time_ms,
+                        today_success_count: today_success,
+                        today_failure_count: today_failure,
+                        today_total_calls: today_success + today_failure,
+                        // Token 刷新统计字段
+                        token_refresh_count: e.token_refresh_count,
+                        token_refresh_failure_count: e.token_refresh_failure_count,
+                        last_token_refresh_time: e.last_token_refresh_time,
+                    }
                 })
                 .collect(),
             current_id,
@@ -1442,21 +1716,33 @@ impl MultiTokenManager {
             };
 
             if is_token_expired(&current_creds) || is_token_expiring_soon(&current_creds) {
-                let new_creds =
-                    refresh_token(&current_creds, &self.config, self.proxy.as_ref()).await?;
-                {
-                    let mut entries = self.entries.lock();
-                    if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
-                        entry.credentials = new_creds.clone();
+                let refresh_result =
+                    refresh_token(&current_creds, &self.config, self.proxy.as_ref()).await;
+
+                match refresh_result {
+                    Ok(new_creds) => {
+                        // 记录刷新成功
+                        self.report_token_refresh_success(id);
+                        {
+                            let mut entries = self.entries.lock();
+                            if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+                                entry.credentials = new_creds.clone();
+                            }
+                        }
+                        // 持久化失败只记录警告，不影响本次请求
+                        if let Err(e) = self.persist_credentials() {
+                            tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
+                        }
+                        new_creds
+                            .access_token
+                            .ok_or_else(|| anyhow::anyhow!("刷新后无 access_token"))?
+                    }
+                    Err(e) => {
+                        // 记录刷新失败
+                        self.report_token_refresh_failure(id);
+                        return Err(e);
                     }
                 }
-                // 持久化失败只记录警告，不影响本次请求
-                if let Err(e) = self.persist_credentials() {
-                    tracing::warn!("Token 刷新后持久化失败（不影响本次请求）: {}", e);
-                }
-                new_creds
-                    .access_token
-                    .ok_or_else(|| anyhow::anyhow!("刷新后无 access_token"))?
             } else {
                 current_creds
                     .access_token
@@ -1529,6 +1815,23 @@ impl MultiTokenManager {
                 failure_count: 0,
                 disabled: false,
                 disabled_reason: None,
+                // 初始化统计字段
+                success_count: 0,
+                total_failure_count: 0,
+                last_call_time: None,
+                total_response_time_ms: 0,
+                today_success_count: 0,
+                today_failure_count: 0,
+                today_date: None,
+                // Token 刷新统计（添加时已成功刷新一次）
+                token_refresh_count: 1,
+                token_refresh_failure_count: 0,
+                last_token_refresh_time: Some(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0),
+                ),
             });
         }
 

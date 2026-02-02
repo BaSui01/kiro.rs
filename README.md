@@ -3,10 +3,12 @@
 一个用 Rust 编写的 Anthropic Claude API 兼容代理服务，将 Anthropic API 请求转换为 Kiro API 请求。
 
 ## 免责声明
+
 本项目仅供研究使用, Use at your own risk, 使用本项目所导致的任何后果由使用人承担, 与本项目无关。
 本项目与 AWS/KIRO/Anthropic/Claude 等官方无关, 本项目不代表官方立场。
 
 ## 注意！
+
 因 TLS 默认从 native-tls 切换至 rustls，你可能需要专门安装证书后才能配置 HTTP 代理。可通过 `config.json` 的 `tlsBackend` 切回 `native-tls`。
 如果遇到请求报错, 尤其是无法刷新 token, 或者是直接返回 error request, 请尝试切换 tls 后端为 `native-tls`, 一般即可解决。
 
@@ -25,26 +27,27 @@
 - **多模型支持**: 支持 Sonnet、Opus、Haiku 系列模型
 - **凭据池管理**: 支持将凭据分组到不同池，每个池独立配置调度模式和代理
 - **多 API Key**: 支持创建多个 API Key，每个 Key 可绑定到特定池
-- **Admin UI**: 完整的 Web 管理后台，支持凭据、池、API Key 管理
+- **Admin UI**: 完整的 Web 管理后台（全新蓝色主题 + 动画交互），支持凭据、池、API Key 管理
 
 ## 支持的 API 端点
 
 ### 标准端点 (/v1)
 
-| 端点 | 方法 | 描述          |
-|------|------|-------------|
-| `/v1/models` | GET | 获取可用模型列表    |
-| `/v1/messages` | POST | 创建消息（对话）    |
-| `/v1/messages/count_tokens` | POST | 估算 Token 数量 |
+| 端点                        | 方法 | 描述             |
+| --------------------------- | ---- | ---------------- |
+| `/v1/models`                | GET  | 获取可用模型列表 |
+| `/v1/messages`              | POST | 创建消息（对话） |
+| `/v1/messages/count_tokens` | POST | 估算 Token 数量  |
 
 ### Claude Code 兼容端点 (/cc/v1)
 
-| 端点 | 方法 | 描述          |
-|------|------|-------------|
-| `/cc/v1/messages` | POST | 创建消息（流式响应会等待上游完成后再返回，确保 `input_tokens` 准确） |
-| `/cc/v1/messages/count_tokens` | POST | 估算 Token 数量（与 `/v1` 相同） |
+| 端点                           | 方法 | 描述                                                                 |
+| ------------------------------ | ---- | -------------------------------------------------------------------- |
+| `/cc/v1/messages`              | POST | 创建消息（流式响应会等待上游完成后再返回，确保 `input_tokens` 准确） |
+| `/cc/v1/messages/count_tokens` | POST | 估算 Token 数量（与 `/v1` 相同）                                     |
 
 > **`/cc/v1/messages` 与 `/v1/messages` 的区别**：
+>
 > - `/v1/messages`：实时流式返回，`message_start` 中的 `input_tokens` 是估算值
 > - `/cc/v1/messages`：缓冲模式，等待上游流完成后，用从 `contextUsageEvent` 计算的准确 `input_tokens` 更正 `message_start`，然后一次性返回所有事件
 > - 等待期间会每 25 秒发送 `ping` 事件保活
@@ -52,6 +55,7 @@
 ## 快速开始
 
 > **前置步骤**：编译前需要先构建前端 Admin UI（用于嵌入到二进制中）：
+>
 > ```bash
 > cd admin-ui && pnpm install && pnpm build
 > ```
@@ -68,34 +72,37 @@ cargo build --release
 
 ```json
 {
-   "host": "127.0.0.1",   // 必配, 监听地址
-   "port": 8990,  // 必配, 监听端口
-   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",  // 必配, 请求的鉴权 token
-   "region": "us-east-1",  // 必配, 区域, 一般保持默认即可
-   "tlsBackend": "rustls", // 可选, TLS 后端: rustls / native-tls
-   "kiroVersion": "0.8.0",  // 可选, 用于自定义请求特征, 不需要请删除: kiro ide 版本
-   "machineId": "如果你需要自定义机器码请将64位机器码填到这里", // 可选, 用于自定义请求特征, 不需要请删除: 机器码
-   "systemVersion": "darwin#24.6.0",  // 可选, 用于自定义请求特征, 不需要请删除: 系统版本
-   "nodeVersion": "22.21.1",  // 可选, 用于自定义请求特征, 不需要请删除: node 版本
-   "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens", // 可选, 用于自定义token统计API, 不需要请删除
-   "countTokensApiKey": "sk-your-count-tokens-api-key",  // 可选, 用于自定义token统计API, 不需要请删除
-   "countTokensAuthType": "x-api-key",  // 可选, 用于自定义token统计API, 不需要请删除
-   "proxyUrl": "http://127.0.0.1:7890", // 可选, HTTP/SOCK5代理, 不需要请删除
-   "proxyUsername": "user",  // 可选, HTTP/SOCK5代理用户名, 不需要请删除
-   "proxyPassword": "pass",  // 可选, HTTP/SOCK5代理密码, 不需要请删除
-   "adminApiKey": "sk-admin-your-secret-key"  // 可选, Admin API 密钥, 用于启用凭据管理 API, 填写后才会启用web管理， 不需要请删除
+  "host": "127.0.0.1", // 必配, 监听地址
+  "port": 8990, // 必配, 监听端口
+  "apiKey": "sk-kiro-rs-qazWSXedcRFV123456", // 必配, 请求的鉴权 token
+  "region": "us-east-1", // 必配, 区域, 一般保持默认即可
+  "tlsBackend": "rustls", // 可选, TLS 后端: rustls / native-tls
+  "kiroVersion": "0.8.0", // 可选, 用于自定义请求特征, 不需要请删除: kiro ide 版本
+  "machineId": "如果你需要自定义机器码请将64位机器码填到这里", // 可选, 用于自定义请求特征, 不需要请删除: 机器码
+  "systemVersion": "darwin#24.6.0", // 可选, 用于自定义请求特征, 不需要请删除: 系统版本
+  "nodeVersion": "22.21.1", // 可选, 用于自定义请求特征, 不需要请删除: node 版本
+  "countTokensApiUrl": "https://api.example.com/v1/messages/count_tokens", // 可选, 用于自定义token统计API, 不需要请删除
+  "countTokensApiKey": "sk-your-count-tokens-api-key", // 可选, 用于自定义token统计API, 不需要请删除
+  "countTokensAuthType": "x-api-key", // 可选, 用于自定义token统计API, 不需要请删除
+  "proxyUrl": "http://127.0.0.1:7890", // 可选, HTTP/SOCK5代理, 不需要请删除
+  "proxyUsername": "user", // 可选, HTTP/SOCK5代理用户名, 不需要请删除
+  "proxyPassword": "pass", // 可选, HTTP/SOCK5代理密码, 不需要请删除
+  "adminApiKey": "sk-admin-your-secret-key" // 可选, Admin API 密钥, 用于启用凭据管理 API, 填写后才会启用web管理， 不需要请删除
 }
 ```
-最小启动配置为: 
+
+最小启动配置为:
+
 ```json
 {
-   "host": "127.0.0.1",
-   "port": 8990,
-   "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
-   "region": "us-east-1",
-   "tlsBackend": "rustls"
+  "host": "127.0.0.1",
+  "port": 8990,
+  "apiKey": "sk-kiro-rs-qazWSXedcRFV123456",
+  "region": "us-east-1",
+  "tlsBackend": "rustls"
 }
 ```
+
 ### 3. 凭证文件
 
 创建 `credentials.json` 凭证文件（从 Kiro IDE 获取）。支持两种格式（注意：JSON 不支持注释，以下注释仅供说明，实际配置请删除）：
@@ -104,13 +111,13 @@ cargo build --release
 
 ```json
 {
-   "accessToken": "这里是请求token 一般有效期一小时",  // 可选, 不需要请删除, 可以自动刷新
-   "refreshToken": "这里是刷新token 一般有效期7-30天不等",  // 必配, 根据实际填写
-   "profileArn": "这是profileArn, 如果没有请你删除该字段， 配置应该像这个 arn:aws:codewhisperer:us-east-1:111112222233:profile/QWER1QAZSDFGH",  // 可选, 不需要请删除
-   "expiresAt": "这里是请求token过期时间, 一般格式是这样2025-12-31T02:32:45.144Z, 在过期前 kirors 不会请求刷新请求token",  // 必配, 不确定你需要写一个已经过期的UTC时间
-   "authMethod": "这里是认证方式 social / idc",  // 必配, IdC/Builder-ID/IAM 三类用户统一填写 idc
-   "clientId": "如果你是 IdC 登录 需要配置这个",  // 可选, 不需要请删除
-   "clientSecret": "如果你是 IdC 登录 需要配置这个"  // 可选, 不需要请删除
+  "accessToken": "这里是请求token 一般有效期一小时", // 可选, 不需要请删除, 可以自动刷新
+  "refreshToken": "这里是刷新token 一般有效期7-30天不等", // 必配, 根据实际填写
+  "profileArn": "这是profileArn, 如果没有请你删除该字段， 配置应该像这个 arn:aws:codewhisperer:us-east-1:111112222233:profile/QWER1QAZSDFGH", // 可选, 不需要请删除
+  "expiresAt": "这里是请求token过期时间, 一般格式是这样2025-12-31T02:32:45.144Z, 在过期前 kirors 不会请求刷新请求token", // 必配, 不确定你需要写一个已经过期的UTC时间
+  "authMethod": "这里是认证方式 social / idc", // 必配, IdC/Builder-ID/IAM 三类用户统一填写 idc
+  "clientId": "如果你是 IdC 登录 需要配置这个", // 可选, 不需要请删除
+  "clientSecret": "如果你是 IdC 登录 需要配置这个" // 可选, 不需要请删除
 }
 ```
 
@@ -118,25 +125,26 @@ cargo build --release
 
 ```json
 [
-   {
-      "refreshToken": "第一个凭据的刷新token",
-      "expiresAt": "2025-12-31T02:32:45.144Z",
-      "authMethod": "social",
-      "priority": 0
-   },
-   {
-      "refreshToken": "第二个凭据的刷新token",
-      "expiresAt": "2025-12-31T02:32:45.144Z",
-      "authMethod": "idc",
-      "clientId": "xxxxxxxxx",
-      "clientSecret": "xxxxxxxxx",
-      "region": "us-east-2",
-      "priority": 1
-   }
+  {
+    "refreshToken": "第一个凭据的刷新token",
+    "expiresAt": "2025-12-31T02:32:45.144Z",
+    "authMethod": "social",
+    "priority": 0
+  },
+  {
+    "refreshToken": "第二个凭据的刷新token",
+    "expiresAt": "2025-12-31T02:32:45.144Z",
+    "authMethod": "idc",
+    "clientId": "xxxxxxxxx",
+    "clientSecret": "xxxxxxxxx",
+    "region": "us-east-2",
+    "priority": 1
+  }
 ]
 ```
 
 > **多凭据特性说明**：
+>
 > - 按 `priority` 字段排序，数字越小优先级越高（默认为 0）
 > - 单凭据最多重试 3 次，单请求最多重试 9 次
 > - 自动故障转移到下一个可用凭据
@@ -145,24 +153,27 @@ cargo build --release
 > - 可选的 `machineId` 字段：凭据级机器码；未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生
 
 最小启动配置(social):
+
 ```json
 {
-   "refreshToken": "XXXXXXXXXXXXXXXX",
-   "expiresAt": "2025-12-31T02:32:45.144Z",
-   "authMethod": "social"
+  "refreshToken": "XXXXXXXXXXXXXXXX",
+  "expiresAt": "2025-12-31T02:32:45.144Z",
+  "authMethod": "social"
 }
 ```
 
 最小启动配置(idc):
+
 ```json
 {
-   "refreshToken": "XXXXXXXXXXXXXXXX",
-   "expiresAt": "2025-12-31T02:32:45.144Z",
-   "authMethod": "idc",
-   "clientId": "xxxxxxxxx",
-   "clientSecret": "xxxxxxxxx"
+  "refreshToken": "XXXXXXXXXXXXXXXX",
+  "expiresAt": "2025-12-31T02:32:45.144Z",
+  "authMethod": "idc",
+  "clientId": "xxxxxxxxx",
+  "clientSecret": "xxxxxxxxx"
 }
 ```
+
 ### 4. 启动服务
 
 ```bash
@@ -180,6 +191,7 @@ cargo build --release
 #### 使用 Docker Compose（最简单）
 
 1. 进入配置目录并准备配置文件：
+
 ```bash
 cd config
 cp config.example.json config.json
@@ -189,21 +201,25 @@ cd ..
 ```
 
 2. 启动服务：
+
 ```bash
 docker-compose up -d
 ```
 
 3. 访问 Admin UI 管理：
+
 ```
 http://localhost:8990/admin
 ```
 
 4. 查看日志：
+
 ```bash
 docker-compose logs -f
 ```
 
 5. 停止服务：
+
 ```bash
 docker-compose down
 ```
@@ -243,6 +259,7 @@ config/
 ```
 
 > **重要说明**：
+>
 > - 程序会自动读写配置目录中的所有文件，所以需要挂载整个目录
 > - `credentials.json` 中的 token 刷新后会自动回写
 > - `pools.json` 和 `api_keys.json` 可以通过 Admin UI 动态创建和管理
@@ -268,50 +285,51 @@ curl http://127.0.0.1:8990/v1/messages \
 
 ### config.json
 
-| 字段 | 类型 | 默认值 | 描述                      |
-|------|------|--------|-------------------------|
-| `host` | string | `127.0.0.1` | 服务监听地址                  |
-| `port` | number | `8990` | 服务监听端口                  |
-| `apiKey` | string | - | 自定义 API Key（用于客户端认证，必配） |
-| `region` | string | `us-east-1` | AWS 区域                  |
-| `kiroVersion` | string | `0.8.0` | Kiro 版本号                |
-| `machineId` | string | - | 自定义机器码（64位十六进制）不定义则自动生成 |
-| `systemVersion` | string | 随机 | 系统版本标识                  |
-| `nodeVersion` | string | `22.21.1` | Node.js 版本标识            |
-| `tlsBackend` | string | `rustls` | TLS 后端：`rustls` 或 `native-tls` |
-| `countTokensApiUrl` | string | - | 外部 count_tokens API 地址（可选） |
-| `countTokensApiKey` | string | - | 外部 count_tokens API 密钥（可选） |
-| `countTokensAuthType` | string | `x-api-key` | 外部 API 认证类型：`x-api-key` 或 `bearer` |
-| `proxyUrl` | string | - | HTTP/SOCKS5 代理地址（可选） |
-| `proxyUsername` | string | - | 代理用户名（可选） |
-| `proxyPassword` | string | - | 代理密码（可选） |
-| `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API, 填写后才会启用web管理（可选） |
-| `sessionCacheMaxCapacity` | number | `1000` | 会话缓存最大容量（用于粘性会话） |
-| `sessionCacheTtlSecs` | number | `3600` | 会话缓存 TTL（秒） |
+| 字段                      | 类型   | 默认值      | 描述                                                                    |
+| ------------------------- | ------ | ----------- | ----------------------------------------------------------------------- |
+| `host`                    | string | `127.0.0.1` | 服务监听地址                                                            |
+| `port`                    | number | `8990`      | 服务监听端口                                                            |
+| `apiKey`                  | string | -           | 自定义 API Key（用于客户端认证，必配）                                  |
+| `region`                  | string | `us-east-1` | AWS 区域                                                                |
+| `kiroVersion`             | string | `0.8.0`     | Kiro 版本号                                                             |
+| `machineId`               | string | -           | 自定义机器码（64 位十六进制）不定义则自动生成                           |
+| `systemVersion`           | string | 随机        | 系统版本标识                                                            |
+| `nodeVersion`             | string | `22.21.1`   | Node.js 版本标识                                                        |
+| `tlsBackend`              | string | `rustls`    | TLS 后端：`rustls` 或 `native-tls`                                      |
+| `countTokensApiUrl`       | string | -           | 外部 count_tokens API 地址（可选）                                      |
+| `countTokensApiKey`       | string | -           | 外部 count_tokens API 密钥（可选）                                      |
+| `countTokensAuthType`     | string | `x-api-key` | 外部 API 认证类型：`x-api-key` 或 `bearer`                              |
+| `proxyUrl`                | string | -           | HTTP/SOCKS5 代理地址（可选）                                            |
+| `proxyUsername`           | string | -           | 代理用户名（可选）                                                      |
+| `proxyPassword`           | string | -           | 代理密码（可选）                                                        |
+| `adminApiKey`             | string | -           | Admin API 密钥，配置后启用凭据管理 API, 填写后才会启用 web 管理（可选） |
+| `sessionCacheMaxCapacity` | number | `1000`      | 会话缓存最大容量（用于粘性会话）                                        |
+| `sessionCacheTtlSecs`     | number | `3600`      | 会话缓存 TTL（秒）                                                      |
 
 ### credentials.json
 
 支持单对象格式（向后兼容）或数组格式（多凭据）。
 
-| 字段 | 类型 | 描述                      |
-|------|------|-------------------------|
-| `id` | number | 凭据唯一 ID（可选，仅用于 Admin API 管理；手写文件可不填） |
-| `accessToken` | string | OAuth 访问令牌（可选，可自动刷新）    |
-| `refreshToken` | string | OAuth 刷新令牌              |
-| `profileArn` | string | AWS Profile ARN（可选，登录时返回） |
-| `expiresAt` | string | Token 过期时间 (RFC3339)    |
-| `authMethod` | string | 认证方式（`social` / `idc`） |
-| `clientId` | string | IdC 登录的客户端 ID（可选）      |
-| `clientSecret` | string | IdC 登录的客户端密钥（可选）      |
-| `priority` | number | 凭据优先级，数字越小越优先，默认为 0（多凭据格式时有效）|
-| `region` | string | 凭据级 region（可选），用于 OIDC token 刷新时指定 endpoint 的区域。未配置时回退到 config.json 的 region。注意：API 调用始终使用 config.json 的 region |
-| `machineId` | string | 凭据级机器码（可选，64位十六进制）。未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生 |
-| `poolId` | string | 凭据所属池 ID（可选），未配置时归属默认池 |
-| `proxyUrl` | string | 凭据级代理地址（可选），优先级高于池级和全局代理 |
-| `proxyUsername` | string | 凭据级代理用户名（可选） |
-| `proxyPassword` | string | 凭据级代理密码（可选） |
+| 字段            | 类型   | 描述                                                                                                                                                  |
+| --------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`            | number | 凭据唯一 ID（可选，仅用于 Admin API 管理；手写文件可不填）                                                                                            |
+| `accessToken`   | string | OAuth 访问令牌（可选，可自动刷新）                                                                                                                    |
+| `refreshToken`  | string | OAuth 刷新令牌                                                                                                                                        |
+| `profileArn`    | string | AWS Profile ARN（可选，登录时返回）                                                                                                                   |
+| `expiresAt`     | string | Token 过期时间 (RFC3339)                                                                                                                              |
+| `authMethod`    | string | 认证方式（`social` / `idc`）                                                                                                                          |
+| `clientId`      | string | IdC 登录的客户端 ID（可选）                                                                                                                           |
+| `clientSecret`  | string | IdC 登录的客户端密钥（可选）                                                                                                                          |
+| `priority`      | number | 凭据优先级，数字越小越优先，默认为 0（多凭据格式时有效）                                                                                              |
+| `region`        | string | 凭据级 region（可选），用于 OIDC token 刷新时指定 endpoint 的区域。未配置时回退到 config.json 的 region。注意：API 调用始终使用 config.json 的 region |
+| `machineId`     | string | 凭据级机器码（可选，64 位十六进制）。未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生                                          |
+| `poolId`        | string | 凭据所属池 ID（可选），未配置时归属默认池                                                                                                             |
+| `proxyUrl`      | string | 凭据级代理地址（可选），优先级高于池级和全局代理                                                                                                      |
+| `proxyUsername` | string | 凭据级代理用户名（可选）                                                                                                                              |
+| `proxyPassword` | string | 凭据级代理密码（可选）                                                                                                                                |
 
 说明：
+
 - IdC / Builder-ID / IAM 在本项目里属于同一种登录方式，配置时统一使用 `authMethod: "idc"`
 - 为兼容旧配置，`builder-id` / `iam` 仍可被识别，但会按 `idc` 处理
 
@@ -353,19 +371,20 @@ curl http://127.0.0.1:8990/v1/messages \
 }
 ```
 
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| `id` | string | 池唯一标识（必填） |
-| `name` | string | 池显示名称（必填） |
-| `description` | string | 池描述（可选） |
-| `enabled` | boolean | 是否启用，默认 true |
-| `schedulingMode` | string | 调度模式：`round_robin`（轮询）或 `priority_fill`（优先填充） |
-| `proxyUrl` | string | 池级代理地址（可选） |
-| `proxyUsername` | string | 池级代理用户名（可选） |
-| `proxyPassword` | string | 池级代理密码（可选） |
-| `priority` | number | 池优先级，数字越小越优先 |
+| 字段             | 类型    | 描述                                                          |
+| ---------------- | ------- | ------------------------------------------------------------- |
+| `id`             | string  | 池唯一标识（必填）                                            |
+| `name`           | string  | 池显示名称（必填）                                            |
+| `description`    | string  | 池描述（可选）                                                |
+| `enabled`        | boolean | 是否启用，默认 true                                           |
+| `schedulingMode` | string  | 调度模式：`round_robin`（轮询）或 `priority_fill`（优先填充） |
+| `proxyUrl`       | string  | 池级代理地址（可选）                                          |
+| `proxyUsername`  | string  | 池级代理用户名（可选）                                        |
+| `proxyPassword`  | string  | 池级代理密码（可选）                                          |
+| `priority`       | number  | 池优先级，数字越小越优先                                      |
 
 > **调度模式说明**：
+>
 > - `round_robin`：轮询模式，依次使用池内凭据
 > - `priority_fill`：优先填充模式，优先使用高优先级凭据，用完后才用低优先级
 
@@ -395,28 +414,29 @@ curl http://127.0.0.1:8990/v1/messages \
 ]
 ```
 
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| `id` | number | API Key 唯一 ID（必填） |
-| `name` | string | API Key 名称（必填） |
-| `key` | string | API Key 值（必填） |
-| `description` | string | API Key 描述（可选） |
-| `createdAt` | string | 创建时间 (RFC3339) |
-| `enabled` | boolean | 是否启用，默认 true |
-| `poolId` | string | 绑定的池 ID（可选），未配置时使用默认池 |
+| 字段          | 类型    | 描述                                    |
+| ------------- | ------- | --------------------------------------- |
+| `id`          | number  | API Key 唯一 ID（必填）                 |
+| `name`        | string  | API Key 名称（必填）                    |
+| `key`         | string  | API Key 值（必填）                      |
+| `description` | string  | API Key 描述（可选）                    |
+| `createdAt`   | string  | 创建时间 (RFC3339)                      |
+| `enabled`     | boolean | 是否启用，默认 true                     |
+| `poolId`      | string  | 绑定的池 ID（可选），未配置时使用默认池 |
 
 > **API Key 路由说明**：
+>
 > - 请求时会根据 API Key 绑定的 `poolId` 自动路由到对应的凭据池
 > - 未绑定池的 API Key 使用默认池（`default`）
 > - 如果同时配置了 `config.json` 的 `apiKey` 和 `api_keys.json`，两者都可用
 
 ## 模型映射
 
-| Anthropic 模型 | Kiro 模型 |
-|----------------|-----------|
-| `*sonnet*` | `claude-sonnet-4.5` |
-| `*opus*` | `claude-opus-4.5` |
-| `*haiku*` | `claude-haiku-4.5` |
+| Anthropic 模型 | Kiro 模型           |
+| -------------- | ------------------- |
+| `*sonnet*`     | `claude-sonnet-4.5` |
+| `*opus*`       | `claude-opus-4.5`   |
+| `*haiku*`      | `claude-haiku-4.5`  |
 
 ## 项目结构
 
@@ -544,6 +564,7 @@ kiro-rs/
 支持两种 API Key 认证方式：
 
 1. **x-api-key Header**
+
    ```
    x-api-key: sk-your-api-key
    ```
@@ -572,6 +593,7 @@ RUST_LOG=debug ./target/release/kiro-rs
 当 `config.json` 配置了非空 `adminApiKey` 时，会启用：
 
 - **Admin UI**
+
   - `GET /admin` - 访问管理页面（需要在编译前构建 `admin-ui/dist`）
 
 - **Admin API**
@@ -582,47 +604,48 @@ RUST_LOG=debug ./target/release/kiro-rs
 
   ### 凭据管理
 
-  | 端点 | 方法 | 描述 |
-  |------|------|------|
-  | `/api/admin/csrf-token` | GET | 获取 CSRF Token |
-  | `/api/admin/credentials` | GET | 获取所有凭据状态 |
-  | `/api/admin/credentials` | POST | 添加新凭据 |
-  | `/api/admin/credentials/import` | POST | 批量导入凭据 |
-  | `/api/admin/credentials/:id` | DELETE | 删除凭据 |
-  | `/api/admin/credentials/:id/disabled` | POST | 设置凭据禁用状态 |
-  | `/api/admin/credentials/:id/priority` | POST | 设置凭据优先级 |
-  | `/api/admin/credentials/:id/reset` | POST | 重置失败计数 |
-  | `/api/admin/credentials/:id/balance` | GET | 获取凭据余额 |
-  | `/api/admin/credentials/:id/pool` | POST | 分配凭据到池 |
+  | 端点                                  | 方法   | 描述             |
+  | ------------------------------------- | ------ | ---------------- |
+  | `/api/admin/csrf-token`               | GET    | 获取 CSRF Token  |
+  | `/api/admin/credentials`              | GET    | 获取所有凭据状态 |
+  | `/api/admin/credentials`              | POST   | 添加新凭据       |
+  | `/api/admin/credentials/import`       | POST   | 批量导入凭据     |
+  | `/api/admin/credentials/:id`          | DELETE | 删除凭据         |
+  | `/api/admin/credentials/:id/disabled` | POST   | 设置凭据禁用状态 |
+  | `/api/admin/credentials/:id/priority` | POST   | 设置凭据优先级   |
+  | `/api/admin/credentials/:id/reset`    | POST   | 重置失败计数     |
+  | `/api/admin/credentials/:id/balance`  | GET    | 获取凭据余额     |
+  | `/api/admin/credentials/:id/pool`     | POST   | 分配凭据到池     |
 
   ### 池管理
 
-  | 端点 | 方法 | 描述 |
-  |------|------|------|
-  | `/api/admin/pools` | GET | 获取所有池 |
-  | `/api/admin/pools` | POST | 创建新池 |
-  | `/api/admin/pools/:id` | GET | 获取池详情 |
-  | `/api/admin/pools/:id` | PUT | 更新池配置 |
-  | `/api/admin/pools/:id` | DELETE | 删除池 |
-  | `/api/admin/pools/:id/disabled` | POST | 设置池禁用状态 |
+  | 端点                            | 方法   | 描述           |
+  | ------------------------------- | ------ | -------------- |
+  | `/api/admin/pools`              | GET    | 获取所有池     |
+  | `/api/admin/pools`              | POST   | 创建新池       |
+  | `/api/admin/pools/:id`          | GET    | 获取池详情     |
+  | `/api/admin/pools/:id`          | PUT    | 更新池配置     |
+  | `/api/admin/pools/:id`          | DELETE | 删除池         |
+  | `/api/admin/pools/:id/disabled` | POST   | 设置池禁用状态 |
 
   ### API Key 管理
 
-  | 端点 | 方法 | 描述 |
-  |------|------|------|
-  | `/api/admin/api-keys` | GET | 获取所有 API Keys（脱敏显示） |
-  | `/api/admin/api-keys` | POST | 创建新 API Key |
-  | `/api/admin/api-keys/:id` | PUT | 更新 API Key |
-  | `/api/admin/api-keys/:id` | DELETE | 删除 API Key |
+  | 端点                      | 方法   | 描述                          |
+  | ------------------------- | ------ | ----------------------------- |
+  | `/api/admin/api-keys`     | GET    | 获取所有 API Keys（脱敏显示） |
+  | `/api/admin/api-keys`     | POST   | 创建新 API Key                |
+  | `/api/admin/api-keys/:id` | PUT    | 更新 API Key                  |
+  | `/api/admin/api-keys/:id` | DELETE | 删除 API Key                  |
 
   ### 配置管理
 
-  | 端点 | 方法 | 描述 |
-  |------|------|------|
-  | `/api/admin/config` | GET | 获取当前配置 |
-  | `/api/admin/config` | PUT | 更新配置 |
+  | 端点                | 方法 | 描述         |
+  | ------------------- | ---- | ------------ |
+  | `/api/admin/config` | GET  | 获取当前配置 |
+  | `/api/admin/config` | PUT  | 更新配置     |
 
   **示例：添加凭据**
+
   ```bash
   # 1. 先获取 CSRF Token
   CSRF_TOKEN=$(curl -s http://127.0.0.1:8990/api/admin/csrf-token \
@@ -641,6 +664,7 @@ RUST_LOG=debug ./target/release/kiro-rs
   ```
 
   **示例：创建池**
+
   ```bash
   curl http://127.0.0.1:8990/api/admin/pools \
     -H "x-api-key: sk-admin-your-secret-key" \
@@ -655,6 +679,7 @@ RUST_LOG=debug ./target/release/kiro-rs
   ```
 
   **示例：创建 API Key**
+
   ```bash
   curl http://127.0.0.1:8990/api/admin/api-keys \
     -H "x-api-key: sk-admin-your-secret-key" \
@@ -674,8 +699,9 @@ MIT
 
 ## 致谢
 
-本项目的实现离不开前辈的努力:  
- - [kiro2api](https://github.com/caidaoli/kiro2api)
- - [proxycast](https://github.com/aiclientproxy/proxycast)
+本项目的实现离不开前辈的努力:
+
+- [kiro2api](https://github.com/caidaoli/kiro2api)
+- [proxycast](https://github.com/aiclientproxy/proxycast)
 
 本项目部分逻辑参考了以上的项目, 再次由衷的感谢!
