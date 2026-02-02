@@ -24,6 +24,32 @@ export interface CredentialStatusItem {
   expiresAt: string | null
   authMethod: string | null
   hasProfileArn: boolean
+  // ============ 调用统计字段 ============
+  /** 成功调用次数（总计） */
+  successCount: number
+  /** 失败调用次数（总计） */
+  totalFailureCount: number
+  /** 总调用次数 */
+  totalCalls: number
+  /** 成功率（百分比，0-100） */
+  successRate: number
+  /** 最后调用时间（Unix 时间戳毫秒） */
+  lastCallTime: number | null
+  /** 平均响应时间（毫秒） */
+  avgResponseTimeMs: number | null
+  /** 今日成功调用次数 */
+  todaySuccessCount: number
+  /** 今日失败调用次数 */
+  todayFailureCount: number
+  /** 今日总调用次数 */
+  todayTotalCalls: number
+  // ============ Token 刷新统计字段 ============
+  /** Token 刷新成功次数 */
+  tokenRefreshCount: number
+  /** Token 刷新失败次数 */
+  tokenRefreshFailureCount: number
+  /** 最后 Token 刷新时间（Unix 时间戳毫秒） */
+  lastTokenRefreshTime: number | null
 }
 
 // 余额响应
@@ -234,4 +260,14 @@ export interface SetPoolDisabledRequest {
 // 分配凭据到池请求
 export interface AssignCredentialToPoolRequest {
   poolId: string
+}
+
+// 池凭证列表响应
+export interface PoolCredentialsResponse {
+  poolId: string
+  total: number
+  available: number
+  currentId: number
+  credentials: CredentialStatusItem[]
+  schedulingMode: SchedulingMode
 }

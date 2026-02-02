@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { PoolStatusItem, CreatePoolRequest, UpdatePoolRequest } from '../types/api'
+import type { PoolStatusItem, CreatePoolRequest, UpdatePoolRequest, PoolCredentialsResponse } from '../types/api'
 import {
   fetchPools,
+  fetchPoolCredentials as apiFetchPoolCredentials,
   createPool as apiCreatePool,
   updatePool as apiUpdatePool,
   deletePool as apiDeletePool,
@@ -56,6 +57,10 @@ export function usePools() {
     await refresh()
   }, [refresh])
 
+  const fetchPoolCredentials = useCallback(async (poolId: string): Promise<PoolCredentialsResponse> => {
+    return await apiFetchPoolCredentials(poolId)
+  }, [])
+
   return {
     pools,
     loading,
@@ -66,5 +71,6 @@ export function usePools() {
     deletePool,
     setPoolDisabled,
     assignCredentialToPool,
+    fetchPoolCredentials,
   }
 }
