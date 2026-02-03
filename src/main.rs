@@ -2,6 +2,7 @@ mod admin;
 mod admin_ui;
 mod anthropic;
 mod common;
+mod health;
 mod http_client;
 mod kiro;
 mod model;
@@ -150,12 +151,27 @@ async fn main() {
 
     // 构建 Anthropic API 路由
     let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
+    let config_arc = Arc::new(config.clone());
     let anthropic_app = anthropic::create_router(
         api_key_manager.clone(),
         Some(kiro_provider),
         first_credentials.profile_arn.clone(),
         pool_manager.clone(),
+        Some(token_manager.clone()),
+        config_arc.clone(),
     );
+
+    // 启动健康检查后台任务
+    if config.health_check_interval_secs > 0 {
+        tracing::info!(
+            "启动健康检查任务，间隔 {} 秒",
+            config.health_check_interval_secs
+        );
+        health::start_health_check_task(
+            token_manager.clone(),
+            config.health_check_interval_secs,
+        );
+    }
 
     let app: axum::Router = if let Some(admin_key) = &config.admin_api_key {
         if admin_key.trim().is_empty() {
@@ -206,9 +222,16 @@ async fn main() {
     tracing::info!("启动服务: {}", addr);
     tracing::info!("API Key 认证已启用（api_keys.json）");
     tracing::info!("可用 API:");
+    tracing::info!("  GET  /health");
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
     tracing::info!("  POST /v1/messages/count_tokens");
+
+    if config.rate_limit_enabled {
+        tracing::info!("限流已启用:");
+        tracing::info!("  全局: {}/分钟, {}/小时", config.rate_limit_per_minute, config.rate_limit_per_hour);
+        tracing::info!("  每 API Key: {}/分钟, {}/小时", config.rate_limit_per_key_per_minute, config.rate_limit_per_key_per_hour);
+    }
 
     if admin_key_valid {
         tracing::info!("Admin API:");

@@ -1,9 +1,9 @@
 {
   "host": "127.0.0.1",
-  "port": 8990,
+  "port": 8080,
   "region": "us-east-1",
   "tlsBackend": "rustls",
-  "adminApiKey": "sk-admin-your-secret-key",
+  "adminApiKey": "your-admin-key-here",
   "sessionCacheMaxCapacity": 10000,
   "sessionCacheTtlSecs": 3600,
   "proxyUrl": null,
@@ -11,5 +11,16 @@
   "proxyPassword": null,
   "countTokensApiUrl": null,
   "countTokensApiKey": null,
-  "countTokensAuthType": "x-api-key"
+  "countTokensAuthType": "x-api-key",
+  "healthCheckIntervalSecs": 600,
+  "rateLimitEnabled": true,
+  "rateLimitPerMinute": 60,
+  "rateLimitPerHour": 1000,
+  "rateLimitPerKeyPerMinute": 30,
+  "rateLimitPerKeyPerHour": 500,
+  "historyManagementEnabled": true,
+  "historyTruncateThreshold": 100000,
+  "historyEnableAiSummary": false,
+  "historyEnableImagePlaceholder": true,
+  "historyKeepRecentMessages": 20
 }

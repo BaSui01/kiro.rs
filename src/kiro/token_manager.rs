@@ -87,7 +87,7 @@ impl TokenManager {
 }
 
 /// 检查 Token 是否在指定时间内过期
-pub(crate) fn is_token_expiring_within(
+pub fn is_token_expiring_within(
     credentials: &KiroCredentials,
     minutes: i64,
 ) -> Option<bool> {
@@ -99,12 +99,12 @@ pub(crate) fn is_token_expiring_within(
 }
 
 /// 检查 Token 是否已过期（提前 5 分钟判断）
-pub(crate) fn is_token_expired(credentials: &KiroCredentials) -> bool {
+pub fn is_token_expired(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 5).unwrap_or(true)
 }
 
 /// 检查 Token 是否即将过期（10分钟内）
-pub(crate) fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
+pub fn is_token_expiring_soon(credentials: &KiroCredentials) -> bool {
     is_token_expiring_within(credentials, 10).unwrap_or(false)
 }
 
@@ -132,7 +132,7 @@ pub(crate) fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::R
 }
 
 /// 刷新 Token
-pub(crate) async fn refresh_token(
+pub async fn refresh_token(
     credentials: &KiroCredentials,
     config: &Config,
     proxy: Option<&ProxyConfig>,

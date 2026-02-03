@@ -1,5 +1,6 @@
 import { RefreshCw, LogOut, Moon, Sun, Zap, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export interface DashboardHeaderProps {
   darkMode: boolean;
@@ -31,6 +32,7 @@ export function DashboardHeader({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <LanguageSwitcher />
           <Button
             variant="ghost"
             size="icon"

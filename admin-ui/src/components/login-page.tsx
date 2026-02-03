@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { KeyRound } from "lucide-react";
 import { storage } from "@/lib/storage";
 import {
@@ -17,6 +18,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
@@ -43,9 +45,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <KeyRound className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle className="text-2xl">Kiro Admin</CardTitle>
+            <CardTitle className="text-2xl">{t('login.title')}</CardTitle>
             <CardDescription>
-              请输入 Admin API Key 以访问管理面板
+              {t('login.description')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -53,7 +55,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <div className="space-y-2">
                 <Input
                   type="password"
-                  placeholder="Admin API Key"
+                  placeholder={t('login.placeholder')}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="text-center"
@@ -64,7 +66,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 className="w-full"
                 disabled={!apiKey.trim()}
               >
-                登录
+                {t('login.loginButton')}
               </Button>
             </form>
           </CardContent>

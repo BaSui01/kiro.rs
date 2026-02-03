@@ -16,6 +16,7 @@ use crate::kiro::provider::KiroProvider;
 use crate::token;
 
 use super::converter::{ConversionError, ConversionResult, convert_request};
+use super::history::{HistoryConfig, manage_history};
 use super::types::MessagesRequest;
 use super::websearch;
 
@@ -145,9 +146,13 @@ pub fn is_websearch_request(payload: &MessagesRequest) -> bool {
 pub fn convert_and_build_request(
     payload: &MessagesRequest,
     profile_arn: Option<&str>,
+    config: &crate::model::config::Config,
 ) -> Result<(String, ConversionResult), ConversionError> {
+    // 应用历史管理（如果启用）
+    let managed_payload = apply_history_management(payload, config);
+
     // 转换请求
-    let conversion_result = convert_request(payload)?;
+    let conversion_result = convert_request(&managed_payload)?;
 
     // 构建 Kiro 请求
     let kiro_request = KiroRequest {
@@ -160,6 +165,61 @@ pub fn convert_and_build_request(
         .map_err(|e| ConversionError::UnsupportedModel(format!("序列化失败: {}", e)))?;
 
     Ok((request_body, conversion_result))
+}
+
+/// 应用历史管理策略
+///
+/// 根据配置对消息历史进行智能管理，包括：
+/// - 自动截断
+/// - AI 摘要
+/// - 图片占位符
+/// - 缓存复用
+fn apply_history_management(
+    payload: &MessagesRequest,
+    config: &crate::model::config::Config,
+) -> MessagesRequest {
+    // 创建历史管理配置
+    let history_config = HistoryConfig {
+        enabled: config.history_management_enabled,
+        truncate_threshold: config.history_truncate_threshold,
+        enable_ai_summary: config.history_enable_ai_summary,
+        enable_image_placeholder: config.history_enable_image_placeholder,
+        enable_prompt_caching: false, // 暂未实现
+        keep_recent_messages: config.history_keep_recent_messages,
+    };
+
+    // 应用历史管理
+    let result = manage_history(
+        &history_config,
+        payload.messages.clone(),
+        payload.system.clone(),
+        payload.tools.as_ref(),
+    );
+
+    // 记录处理结果
+    if result.truncated || result.summarized || result.image_placeholder_applied {
+        tracing::info!(
+            "历史管理应用：truncated={}, summarized={}, image_placeholder={}, tokens: {} -> {}",
+            result.truncated,
+            result.summarized,
+            result.image_placeholder_applied,
+            result.original_tokens,
+            result.processed_tokens
+        );
+    }
+
+    // 返回处理后的请求
+    MessagesRequest {
+        model: payload.model.clone(),
+        max_tokens: payload.max_tokens,
+        messages: result.messages,
+        stream: payload.stream,
+        system: result.system,
+        tools: payload.tools.clone(),
+        tool_choice: payload.tool_choice.clone(),
+        thinking: payload.thinking.clone(),
+        metadata: payload.metadata.clone(),
+    }
 }
 
 /// 验证并准备请求
@@ -175,6 +235,7 @@ pub fn validate_and_prepare_request(
     profile_arn: Option<&String>,
     payload: &MessagesRequest,
     headers: &HeaderMap,
+    config: &crate::model::config::Config,
 ) -> ValidationResult {
     // 检查 KiroProvider 是否可用
     let provider = match provider {
@@ -196,7 +257,7 @@ pub fn validate_and_prepare_request(
     }
 
     // 转换请求
-    let (request_body, _conversion_result) = match convert_and_build_request(payload, profile_arn.map(|s| s.as_str())) {
+    let (request_body, _conversion_result) = match convert_and_build_request(payload, profile_arn.map(|s| s.as_str()), config) {
         Ok(result) => result,
         Err(e) => {
             tracing::warn!("请求转换失败: {}", e);
