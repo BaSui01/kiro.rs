@@ -143,6 +143,7 @@ async fn handle_messages_request(
         state.profile_arn.as_ref(),
         &payload,
         &headers,
+        &state.config,
     ) {
         ValidationResult::Ok(ctx) => {
             handle_validated_request(ctx, use_buffered_stream).await

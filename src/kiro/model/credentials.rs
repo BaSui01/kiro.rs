@@ -281,6 +281,13 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            success_count: 0,
+            total_failure_count: 0,
+            last_call_time: None,
+            total_response_time_ms: 0,
+            last_token_refresh_time: None,
+            token_refresh_count: 0,
+            token_refresh_failure_count: 0,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -386,6 +393,13 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            success_count: 0,
+            total_failure_count: 0,
+            last_call_time: None,
+            total_response_time_ms: 0,
+            last_token_refresh_time: None,
+            token_refresh_count: 0,
+            token_refresh_failure_count: 0,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -412,6 +426,13 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            success_count: 0,
+            total_failure_count: 0,
+            last_call_time: None,
+            total_response_time_ms: 0,
+            last_token_refresh_time: None,
+            token_refresh_count: 0,
+            token_refresh_failure_count: 0,
         };
 
         let json = creds.to_pretty_json().unwrap();
@@ -520,6 +541,13 @@ mod tests {
             proxy_url: None,
             proxy_username: None,
             proxy_password: None,
+            success_count: 0,
+            total_failure_count: 0,
+            last_call_time: None,
+            total_response_time_ms: 0,
+            last_token_refresh_time: None,
+            token_refresh_count: 0,
+            token_refresh_failure_count: 0,
         };
 
         let json = original.to_pretty_json().unwrap();

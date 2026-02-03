@@ -79,6 +79,50 @@ pub struct Config {
     /// 会话缓存 TTL（秒，默认 3600 = 1 小时）
     #[serde(default = "default_session_cache_ttl_secs")]
     pub session_cache_ttl_secs: u64,
+
+    /// 健康检查间隔（秒，默认 600 = 10 分钟）
+    #[serde(default = "default_health_check_interval_secs")]
+    pub health_check_interval_secs: u64,
+
+    /// 启用限流（默认 true）
+    #[serde(default = "default_rate_limit_enabled")]
+    pub rate_limit_enabled: bool,
+
+    /// 全局限流：每分钟请求数（默认 60）
+    #[serde(default = "default_rate_limit_per_minute")]
+    pub rate_limit_per_minute: u64,
+
+    /// 全局限流：每小时请求数（默认 1000）
+    #[serde(default = "default_rate_limit_per_hour")]
+    pub rate_limit_per_hour: u64,
+
+    /// 每 API Key 限流：每分钟请求数（默认 30）
+    #[serde(default = "default_rate_limit_per_key_per_minute")]
+    pub rate_limit_per_key_per_minute: u64,
+
+    /// 每 API Key 限流：每小时请求数（默认 500）
+    #[serde(default = "default_rate_limit_per_key_per_hour")]
+    pub rate_limit_per_key_per_hour: u64,
+
+    /// 启用智能历史管理（默认 true）
+    #[serde(default = "default_history_management_enabled")]
+    pub history_management_enabled: bool,
+
+    /// 历史管理截断阈值（tokens，默认 100000）
+    #[serde(default = "default_history_truncate_threshold")]
+    pub history_truncate_threshold: u64,
+
+    /// 启用 AI 摘要（默认 false，需要额外 API 调用）
+    #[serde(default = "default_history_enable_ai_summary")]
+    pub history_enable_ai_summary: bool,
+
+    /// 启用图片占位符（默认 true）
+    #[serde(default = "default_history_enable_image_placeholder")]
+    pub history_enable_image_placeholder: bool,
+
+    /// 保留最近的消息数量（默认 20）
+    #[serde(default = "default_history_keep_recent_messages")]
+    pub history_keep_recent_messages: usize,
 }
 
 fn default_host() -> String {
@@ -122,6 +166,50 @@ fn default_session_cache_ttl_secs() -> u64 {
     3600
 }
 
+fn default_health_check_interval_secs() -> u64 {
+    600 // 10 分钟
+}
+
+fn default_rate_limit_enabled() -> bool {
+    true
+}
+
+fn default_rate_limit_per_minute() -> u64 {
+    60
+}
+
+fn default_rate_limit_per_hour() -> u64 {
+    1000
+}
+
+fn default_rate_limit_per_key_per_minute() -> u64 {
+    30
+}
+
+fn default_rate_limit_per_key_per_hour() -> u64 {
+    500
+}
+
+fn default_history_management_enabled() -> bool {
+    true
+}
+
+fn default_history_truncate_threshold() -> u64 {
+    100_000
+}
+
+fn default_history_enable_ai_summary() -> bool {
+    false
+}
+
+fn default_history_enable_image_placeholder() -> bool {
+    true
+}
+
+fn default_history_keep_recent_messages() -> usize {
+    20
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -142,6 +230,17 @@ impl Default for Config {
             admin_api_key: None,
             session_cache_max_capacity: default_session_cache_max_capacity(),
             session_cache_ttl_secs: default_session_cache_ttl_secs(),
+            health_check_interval_secs: default_health_check_interval_secs(),
+            rate_limit_enabled: default_rate_limit_enabled(),
+            rate_limit_per_minute: default_rate_limit_per_minute(),
+            rate_limit_per_hour: default_rate_limit_per_hour(),
+            rate_limit_per_key_per_minute: default_rate_limit_per_key_per_minute(),
+            rate_limit_per_key_per_hour: default_rate_limit_per_key_per_hour(),
+            history_management_enabled: default_history_management_enabled(),
+            history_truncate_threshold: default_history_truncate_threshold(),
+            history_enable_ai_summary: default_history_enable_ai_summary(),
+            history_enable_image_placeholder: default_history_enable_image_placeholder(),
+            history_keep_recent_messages: default_history_keep_recent_messages(),
         }
     }
 }
@@ -216,6 +315,27 @@ impl Config {
             errors.push("sessionCacheTtlSecs 不能为 0".to_string());
         }
 
+        // 检查健康检查间隔
+        if self.health_check_interval_secs == 0 {
+            errors.push("healthCheckIntervalSecs 不能为 0".to_string());
+        }
+
+        // 检查限流配置
+        if self.rate_limit_enabled {
+            if self.rate_limit_per_minute == 0 {
+                errors.push("rateLimitPerMinute 不能为 0".to_string());
+            }
+            if self.rate_limit_per_hour == 0 {
+                errors.push("rateLimitPerHour 不能为 0".to_string());
+            }
+            if self.rate_limit_per_key_per_minute == 0 {
+                errors.push("rateLimitPerKeyPerMinute 不能为 0".to_string());
+            }
+            if self.rate_limit_per_key_per_hour == 0 {
+                errors.push("rateLimitPerKeyPerHour 不能为 0".to_string());
+            }
+        }
+
         // 检查 count_tokens_auth_type
         let valid_auth_types = ["x-api-key", "bearer"];
         if !valid_auth_types.contains(&self.count_tokens_auth_type.as_str()) {
@@ -223,6 +343,16 @@ impl Config {
                 "countTokensAuthType 无效: {}，应为 'x-api-key' 或 'bearer'",
                 self.count_tokens_auth_type
             ));
+        }
+
+        // 检查历史管理配置
+        if self.history_management_enabled {
+            if self.history_truncate_threshold == 0 {
+                errors.push("historyTruncateThreshold 不能为 0".to_string());
+            }
+            if self.history_keep_recent_messages == 0 {
+                errors.push("historyKeepRecentMessages 不能为 0".to_string());
+            }
         }
 
         if errors.is_empty() {

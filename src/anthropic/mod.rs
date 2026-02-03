@@ -24,6 +24,7 @@
 
 mod converter;
 mod handlers;
+mod history;
 mod middleware;
 mod router;
 mod service;

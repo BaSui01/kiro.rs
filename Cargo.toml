@@ -3,6 +3,18 @@ name = "kiro-rs"
 version = "2026.2.6"
 edition = "2024"
 
+[lib]
+name = "kiro_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kiro-rs"
+path = "src/main.rs"
+
+[[bin]]
+name = "kiro-cli"
+path = "cli/main.rs"
+
 [profile.release]
 lto = true
 strip = true
@@ -13,6 +25,7 @@ tokio = { version = "1.0", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["stream", "json", "socks", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"  # YAML 支持（CLI 导入导出）
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
@@ -36,6 +49,9 @@ moka = { version = "0.12", features = ["sync"] }  # 高性能缓存（TTL + LRU�
 subtle = "2.6"        # 常量时间比较（防止时序攻击）
 rust-embed = "8"      # 嵌入静态文件
 mime_guess = "2"      # MIME 类型推断
+claude-tokenizer = "0.2"  # Claude 官方 tokenizer（精准 token 计数）
+tower = { version = "0.5", features = ["limit", "util"] }  # 限流中间件
+tower_governor = "0.4"  # 基于 tower 的限流器
 
 [dev-dependencies]
 tempfile = "3"        # 测试用临时文件
