@@ -6,6 +6,7 @@ import {
   RotateCcw,
   TrendingUp,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 
 export interface DashboardStatsData {
@@ -22,6 +23,7 @@ export interface DashboardStatsProps {
 }
 
 export function DashboardStats({ stats }: DashboardStatsProps) {
+  const { t } = useTranslation();
   const {
     totalPools,
     enabledPools,
@@ -34,7 +36,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
   const statItems = [
     {
       icon: Database,
-      label: "总池数",
+      label: t('dashboard.stats.totalPools'),
       value: totalPools,
       color: "from-cyan-500 to-blue-500",
       bgColor: "bg-cyan-500/10",
@@ -42,7 +44,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     },
     {
       icon: CheckCircle2,
-      label: "启用池数",
+      label: t('dashboard.stats.enabledPools'),
       value: enabledPools,
       color: "from-green-500 to-emerald-500",
       bgColor: "bg-green-500/10",
@@ -50,7 +52,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     },
     {
       icon: Key,
-      label: "总凭据数",
+      label: t('dashboard.stats.totalCredentials'),
       value: totalCredentials,
       color: "from-orange-500 to-amber-500",
       bgColor: "bg-orange-500/10",
@@ -58,7 +60,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     },
     {
       icon: TrendingUp,
-      label: "可用凭据",
+      label: t('dashboard.stats.availableCredentials'),
       value: availableCredentials,
       color: "from-blue-500 to-cyan-500",
       bgColor: "bg-blue-500/10",
@@ -66,18 +68,16 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     },
     {
       icon: Users,
-      label: "会话缓存",
+      label: t('dashboard.stats.sessionCacheSize'),
       value: sessionCacheSize,
-      subtitle: "粘性会话",
       color: "from-primary/80 to-primary",
       bgColor: "bg-primary/10",
       textColor: "text-primary",
     },
     {
       icon: RotateCcw,
-      label: "轮询计数",
+      label: t('dashboard.stats.roundRobinCounter'),
       value: roundRobinCounter,
-      subtitle: "新会话分配",
       color: "from-amber-500 to-yellow-500",
       bgColor: "bg-amber-500/10",
       textColor: "text-amber-600 dark:text-amber-400",
@@ -106,11 +106,6 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
             <div className="text-xs font-medium text-muted-foreground">
               {item.label}
             </div>
-            {item.subtitle && (
-              <div className="text-[10px] text-muted-foreground/70 mt-0.5">
-                {item.subtitle}
-              </div>
-            )}
           </CardContent>
         </Card>
       ))}

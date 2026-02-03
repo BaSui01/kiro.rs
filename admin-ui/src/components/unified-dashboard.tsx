@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { storage } from "@/lib/storage";
 import { BalanceDialog } from "@/components/balance-dialog";
@@ -27,6 +28,7 @@ export function UnifiedDashboard({
   onLogout,
   onSettings,
 }: UnifiedDashboardProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const {
     data: credentialsData,
@@ -67,7 +69,7 @@ export function UnifiedDashboard({
   const handleRefresh = () => {
     refetchCredentials();
     refetchPools();
-    toast.success("已刷新");
+    toast.success(t('common.refreshed'));
   };
 
   const handleLogout = () => {
@@ -85,23 +87,23 @@ export function UnifiedDashboard({
   };
 
   const handleDeletePool = async (poolId: string) => {
-    if (!confirm(`确定要删除池 "${poolId}" 吗？此操作不可撤销。`)) {
+    if (!confirm(t('dashboard.deletePoolConfirm', { poolId }))) {
       return;
     }
     try {
       await deletePool(poolId);
-      toast.success(`池 ${poolId} 已删除`);
+      toast.success(t('dashboard.poolDeleted', { poolId }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "删除池失败");
+      toast.error(err instanceof Error ? err.message : t('dashboard.deletePoolFailed'));
     }
   };
 
   const handleTogglePoolEnabled = async (poolId: string, enabled: boolean) => {
     try {
       await setPoolDisabled(poolId, !enabled);
-      toast.success(`池 ${poolId} 已${enabled ? "启用" : "禁用"}`);
+      toast.success(t(enabled ? 'dashboard.poolEnabled' : 'dashboard.poolDisabled'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "操作失败");
+      toast.error(err instanceof Error ? err.message : t('dashboard.operationFailed'));
     }
   };
 
@@ -111,13 +113,13 @@ export function UnifiedDashboard({
     try {
       if (editingPool) {
         await updatePool(editingPool.id, data as UpdatePoolRequest);
-        toast.success(`池 ${editingPool.id} 已更新`);
+        toast.success(t('dashboard.poolUpdated', { poolId: editingPool.id }));
       } else {
         await createPool(data as CreatePoolRequest);
-        toast.success(`池 ${(data as CreatePoolRequest).id} 已创建`);
+        toast.success(t('dashboard.poolCreated', { poolId: (data as CreatePoolRequest).id }));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "操作失败");
+      toast.error(err instanceof Error ? err.message : t('dashboard.operationFailed'));
       throw err;
     }
   };
@@ -142,7 +144,7 @@ export function UnifiedDashboard({
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-muted border-t-primary mx-auto mb-4"></div>
             <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-primary/30 animate-ping mx-auto"></div>
           </div>
-          <p className="text-muted-foreground font-medium">加载中...</p>
+          <p className="text-muted-foreground font-medium">{t('common.loading')}</p>
         </div>
       </div>
     );

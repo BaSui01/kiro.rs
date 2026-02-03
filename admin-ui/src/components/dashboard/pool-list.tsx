@@ -1,4 +1,5 @@
 import { Plus, Layers } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { PoolItem } from "./pool-item";
 import type {
@@ -44,6 +45,7 @@ export function PoolList({
   fetchPoolCredentials,
   onTransferCredential,
 }: PoolListProps) {
+  const { t } = useTranslation();
   const sortedPools = [...pools].sort((a, b) => {
     if (a.id === "default") return -1;
     if (b.id === "default") return 1;
@@ -69,7 +71,7 @@ export function PoolList({
           className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all"
         >
           <Plus className="h-4 w-4 mr-2" />
-          创建池
+          {t('dashboard.createPool')}
         </Button>
       </div>
 
