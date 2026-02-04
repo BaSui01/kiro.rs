@@ -15,6 +15,7 @@ import {
   Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   Card,
   CardContent,
@@ -59,6 +60,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
+  const { t } = useTranslation();
   const {
     data: config,
     isLoading: configLoading,
@@ -174,7 +176,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         proxyPassword: configForm.proxyPassword || undefined,
         apiKey: configForm.apiKey || undefined,
       });
-      toast.success("配置已保存，部分配置需要重启服务后生效");
+      toast.success(t("settings.saveSuccess"));
       setEditingConfig(false);
     } catch (error) {
       toast.error(extractErrorMessage(error));
@@ -286,7 +288,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">加载中...</p>
+          <p className="text-muted-foreground">{t("common.loading")}</p>
         </div>
       </div>
     );
@@ -302,7 +304,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               <Button variant="ghost" size="icon" onClick={onBack}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <span className="font-semibold">设置</span>
+              <span className="font-semibold">{t("settings.title")}</span>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -312,7 +314,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                   refetchConfig();
                   refetchKeys();
                   refetchPools();
-                  toast.success("已刷新");
+                  toast.success(t("common.refreshed"));
                 }}
               >
                 <RefreshCw className="h-5 w-5" />
@@ -342,7 +344,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       setEditingConfig(true);
                     }}
                   >
-                    编辑
+                    {t("common.edit")}
                   </Button>
                 ) : (
                   <div className="flex gap-2">
@@ -351,7 +353,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       size="sm"
                       onClick={() => setEditingConfig(false)}
                     >
-                      取消
+                      {t("common.cancel")}
                     </Button>
                     <Button
                       size="sm"
@@ -361,7 +363,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                       {updateConfig.isPending && (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       )}
-                      保存
+                      {t("common.save")}
                     </Button>
                   </div>
                 )}
@@ -635,7 +637,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                           <Badge
                             variant={key.enabled ? "success" : "secondary"}
                           >
-                            {key.enabled ? "启用" : "禁用"}
+                            {key.enabled ? t("common.enabled") : t("common.disabled")}
                           </Badge>
                           {key.poolId === "__auto__" ? (
                             <Badge
@@ -788,7 +790,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={handleCloseApiKeyDialog}>
-                  取消
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   onClick={handleCreateApiKey}
@@ -797,7 +799,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                   {createApiKey.isPending && (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   )}
-                  创建
+                  {t("common.create")}
                 </Button>
               </DialogFooter>
             </>
@@ -819,7 +821,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -829,7 +831,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               {deleteApiKey.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              删除
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -872,7 +874,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               variant="outline"
               onClick={() => setEditPoolDialogOpen(false)}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleSavePoolBinding}
@@ -881,7 +883,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               {updateApiKey.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              保存
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

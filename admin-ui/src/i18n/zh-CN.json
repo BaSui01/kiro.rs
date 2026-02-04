@@ -91,7 +91,13 @@
     "descriptionPlaceholder": "可选的池描述",
     "proxyUrlPlaceholder": "例如: http://proxy.example.com:8080",
     "proxyUsernamePlaceholder": "可选",
-    "proxyPasswordPlaceholder": "可选"
+    "proxyPasswordPlaceholder": "可选",
+    "createPoolDescription": "创建一个新的凭证池来管理凭据",
+    "editPoolDescription": "修改池的配置信息",
+    "idHelp": "唯一标识符，创建后不可修改",
+    "roundRobinDescription": "均匀分配请求到各凭据",
+    "priorityFillDescription": "优先使用高优先级凭据",
+    "priorityHelp": "数字越小优先级越高，用于池的排序"
   },
   "credential": {
     "id": "凭证 ID",
@@ -161,7 +167,21 @@
     "noFileSelected": "请选择文件",
     "invalidFileFormat": "无效的文件格式",
     "exampleFormat": "示例格式",
-    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]"
+    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]",
+    "parseFileFailed": "解析文件 {{fileName}} 失败: {{error}}",
+    "dropJsonFile": "请拖放 JSON 文件",
+    "clickOrDrop": "点击选择或拖放 JSON 文件",
+    "multipleFilesSupported": "支持多文件选择",
+    "filesSelected": "已选择 {{count}} 个文件:",
+    "credentialsParsed": "解析到 {{count}} 个凭据:",
+    "credentialN": "凭据 {{n}}",
+    "moreCredentials": "... 还有 {{count}} 个",
+    "skippedCredentials": "跳过的凭据:",
+    "importing": "导入中...",
+    "importToPool": "选择要将凭据导入到哪个池",
+    "defaultPool": "默认池 (default)",
+    "skippedInvalid": "跳过 {{count}} 个无效凭据",
+    "credentialsUnit": "个凭据"
   },
   "balance": {
     "title": "余额信息",
@@ -171,7 +191,10 @@
     "totalBalance": "总余额",
     "usedBalance": "已使用",
     "remainingBalance": "剩余余额",
-    "refreshBalance": "刷新余额"
+    "refreshBalance": "刷新余额",
+    "usageLimit": "限额",
+    "usagePercentage": "已使用",
+    "nextReset": "下次重置"
   },
   "settings": {
     "title": "系统设置",

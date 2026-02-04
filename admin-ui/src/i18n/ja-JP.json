@@ -91,7 +91,13 @@
     "descriptionPlaceholder": "オプションのプール説明",
     "proxyUrlPlaceholder": "例: http://proxy.example.com:8080",
     "proxyUsernamePlaceholder": "オプション",
-    "proxyPasswordPlaceholder": "オプション"
+    "proxyPasswordPlaceholder": "オプション",
+    "createPoolDescription": "認証情報を管理するための新しいプールを作成",
+    "editPoolDescription": "プールの設定を変更",
+    "idHelp": "一意の識別子、作成後は変更できません",
+    "roundRobinDescription": "認証情報全体にリクエストを均等に分散",
+    "priorityFillDescription": "優先度の高い認証情報を優先的に使用",
+    "priorityHelp": "数値が小さいほど優先度が高く、プールのソートに使用されます"
   },
   "credential": {
     "id": "認証情報 ID",
@@ -161,7 +167,21 @@
     "noFileSelected": "ファイルを選択してください",
     "invalidFileFormat": "無効なファイル形式",
     "exampleFormat": "例の形式",
-    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]"
+    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]",
+    "parseFileFailed": "ファイル {{fileName}} の解析に失敗しました: {{error}}",
+    "dropJsonFile": "JSON ファイルをドロップしてください",
+    "clickOrDrop": "クリックして選択または JSON ファイルをドロップ",
+    "multipleFilesSupported": "複数ファイル対応",
+    "filesSelected": "{{count}} 個のファイルが選択されました:",
+    "credentialsParsed": "{{count}} 件の認証情報を解析しました:",
+    "credentialN": "認証情報 {{n}}",
+    "moreCredentials": "... 他 {{count}} 件",
+    "skippedCredentials": "スキップされた認証情報:",
+    "importing": "インポート中...",
+    "importToPool": "認証情報をインポートするプールを選択",
+    "defaultPool": "デフォルトプール (default)",
+    "skippedInvalid": "{{count}} 件の無効な認証情報をスキップしました",
+    "credentialsUnit": "件の認証情報"
   },
   "balance": {
     "title": "残高情報",
@@ -171,7 +191,10 @@
     "totalBalance": "総残高",
     "usedBalance": "使用済み残高",
     "remainingBalance": "残り残高",
-    "refreshBalance": "残高を更新"
+    "refreshBalance": "残高を更新",
+    "usageLimit": "制限",
+    "usagePercentage": "使用済み",
+    "nextReset": "次回リセット"
   },
   "settings": {
     "title": "システム設定",

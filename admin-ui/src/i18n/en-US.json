@@ -91,7 +91,13 @@
     "descriptionPlaceholder": "Optional pool description",
     "proxyUrlPlaceholder": "e.g., http://proxy.example.com:8080",
     "proxyUsernamePlaceholder": "Optional",
-    "proxyPasswordPlaceholder": "Optional"
+    "proxyPasswordPlaceholder": "Optional",
+    "createPoolDescription": "Create a new credential pool to manage credentials",
+    "editPoolDescription": "Modify pool configuration",
+    "idHelp": "Unique identifier, cannot be modified after creation",
+    "roundRobinDescription": "Evenly distribute requests across credentials",
+    "priorityFillDescription": "Prioritize high-priority credentials",
+    "priorityHelp": "Lower numbers have higher priority, used for pool sorting"
   },
   "credential": {
     "id": "Credential ID",
@@ -161,7 +167,21 @@
     "noFileSelected": "Please select a file",
     "invalidFileFormat": "Invalid file format",
     "exampleFormat": "Example Format",
-    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]"
+    "exampleJson": "[\n  {\n    \"auth_method\": \"session_token\",\n    \"session_token\": \"your-token-here\",\n    \"pool_id\": \"default\",\n    \"priority\": 0\n  }\n]",
+    "parseFileFailed": "Failed to parse file {{fileName}}: {{error}}",
+    "dropJsonFile": "Please drop JSON file",
+    "clickOrDrop": "Click to select or drop JSON file",
+    "multipleFilesSupported": "Multiple files supported",
+    "filesSelected": "{{count}} files selected:",
+    "credentialsParsed": "Parsed {{count}} credentials:",
+    "credentialN": "Credential {{n}}",
+    "moreCredentials": "... and {{count}} more",
+    "skippedCredentials": "Skipped credentials:",
+    "importing": "Importing...",
+    "importToPool": "Select which pool to import credentials to",
+    "defaultPool": "Default Pool (default)",
+    "skippedInvalid": "Skipped {{count}} invalid credentials",
+    "credentialsUnit": "credentials"
   },
   "balance": {
     "title": "Balance Information",
@@ -171,7 +191,10 @@
     "totalBalance": "Total Balance",
     "usedBalance": "Used Balance",
     "remainingBalance": "Remaining Balance",
-    "refreshBalance": "Refresh Balance"
+    "refreshBalance": "Refresh Balance",
+    "usageLimit": "Limit",
+    "usagePercentage": "Used",
+    "nextReset": "Next Reset"
   },
   "settings": {
     "title": "System Settings",

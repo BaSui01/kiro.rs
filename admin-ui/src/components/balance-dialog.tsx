@@ -7,6 +7,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useCredentialBalance } from "@/hooks/use-credentials";
 import { parseError } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface BalanceDialogProps {
   credentialId: number | null;
@@ -19,6 +20,7 @@ export function BalanceDialog({
   open,
   onOpenChange,
 }: BalanceDialogProps) {
+  const { t } = useTranslation();
   const {
     data: balance,
     isLoading,
@@ -26,7 +28,7 @@ export function BalanceDialog({
   } = useCredentialBalance(credentialId);
 
   const formatDate = (timestamp: number | null) => {
-    if (!timestamp) return "未知";
+    if (!timestamp) return t("common.unknown");
     return new Date(timestamp * 1000).toLocaleString("zh-CN");
   };
 
@@ -41,7 +43,7 @@ export function BalanceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>凭据 #{credentialId} 余额信息</DialogTitle>
+          <DialogTitle>{t("balance.title")} #{credentialId}</DialogTitle>
         </DialogHeader>
 
         {isLoading && (
@@ -83,32 +85,32 @@ export function BalanceDialog({
             {/* 订阅类型 */}
             <div className="text-center">
               <span className="text-lg font-semibold">
-                {balance.subscriptionTitle || "未知订阅类型"}
+                {balance.subscriptionTitle || t("common.unknown")}
               </span>
             </div>
 
             {/* 使用进度 */}
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>已使用: ${formatNumber(balance.currentUsage)}</span>
-                <span>限额: ${formatNumber(balance.usageLimit)}</span>
+                <span>{t("balance.usedBalance")}: ${formatNumber(balance.currentUsage)}</span>
+                <span>{t("balance.usageLimit")}: ${formatNumber(balance.usageLimit)}</span>
               </div>
               <Progress value={balance.usagePercentage} />
               <div className="text-center text-sm text-muted-foreground">
-                {(balance.usagePercentage || 0).toFixed(1)}% 已使用
+                {(balance.usagePercentage || 0).toFixed(1)}% {t("balance.usagePercentage")}
               </div>
             </div>
 
             {/* 详细信息 */}
             <div className="grid grid-cols-2 gap-4 pt-4 border-t text-sm">
               <div>
-                <span className="text-muted-foreground">剩余额度：</span>
+                <span className="text-muted-foreground">{t("balance.remainingBalance")}：</span>
                 <span className="font-medium text-green-600">
                   ${formatNumber(balance.remaining)}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground">下次重置：</span>
+                <span className="text-muted-foreground">{t("balance.nextReset")}：</span>
                 <span className="font-medium">
                   {formatDate(balance.nextResetAt)}
                 </span>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   RefreshCw,
   ChevronUp,
@@ -34,17 +35,12 @@ interface CredentialCardProps {
   schedulingMode: SchedulingMode;
 }
 
-function formatAuthMethodLabel(authMethod: string | null): string {
-  if (!authMethod) return "未知";
-  if (authMethod.toLowerCase() === "idc") return "IdC/Builder-ID/IAM";
-  return authMethod;
-}
-
 export function CredentialCard({
   credential,
   onViewBalance,
   schedulingMode,
 }: CredentialCardProps) {
+  const { t } = useTranslation();
   const [editingPriority, setEditingPriority] = useState(false);
   const [priorityValue, setPriorityValue] = useState(
     String(credential.priority)
@@ -53,6 +49,12 @@ export function CredentialCard({
 
   // 是否为优先填充模式（只有这个模式下优先级才有意义）
   const isPriorityMode = schedulingMode === "priority_fill";
+
+  const formatAuthMethodLabel = (authMethod: string | null): string => {
+    if (!authMethod) return t("credential.authMethods.unknown");
+    if (authMethod.toLowerCase() === "idc") return t("credential.authMethods.idc");
+    return authMethod;
+  };
 
   const setDisabled = useSetDisabled();
   const setPriority = useSetPriority();
@@ -67,7 +69,7 @@ export function CredentialCard({
           toast.success(res.message);
         },
         onError: (err) => {
-          toast.error("操作失败: " + (err as Error).message);
+          toast.error(t("credential.operationFailed") + ": " + (err as Error).message);
         },
       }
     );
@@ -76,7 +78,7 @@ export function CredentialCard({
   const handlePriorityChange = () => {
     const newPriority = parseInt(priorityValue, 10);
     if (isNaN(newPriority) || newPriority < 0) {
-      toast.error("优先级必须是非负整数");
+      toast.error(t("credential.priorityMustBeNonNegative"));
       return;
     }
     setPriority.mutate(
@@ -87,7 +89,7 @@ export function CredentialCard({
           setEditingPriority(false);
         },
         onError: (err) => {
-          toast.error("操作失败: " + (err as Error).message);
+          toast.error(t("credential.operationFailed") + ": " + (err as Error).message);
         },
       }
     );
@@ -99,7 +101,7 @@ export function CredentialCard({
         toast.success(res.message);
       },
       onError: (err) => {
-        toast.error("操作失败: " + (err as Error).message);
+        toast.error(t("credential.operationFailed") + ": " + (err as Error).message);
       },
     });
   };
@@ -111,13 +113,13 @@ export function CredentialCard({
         setShowDeleteDialog(false);
       },
       onError: (err) => {
-        toast.error("删除失败: " + (err as Error).message);
+        toast.error(t("credential.deleteFailed") + ": " + (err as Error).message);
       },
     });
   };
 
   const formatExpiry = (expiresAt: string | null) => {
-    if (!expiresAt) return "未知";
+    if (!expiresAt) return t("common.unknown");
     const date = new Date(expiresAt);
     const now = new Date();
     const diff = date.getTime() - now.getTime();
@@ -153,17 +155,17 @@ export function CredentialCard({
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
-              凭据 #{credential.id}
+              {t("credential.id")} #{credential.id}
               {/* 只在优先填充模式下显示"当前"标记 */}
               {isPriorityMode && credential.isCurrent && (
                 <Badge variant="success">当前</Badge>
               )}
               {credential.disabled && (
-                <Badge variant="destructive">已禁用</Badge>
+                <Badge variant="destructive">{t("credential.disabled")}</Badge>
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">启用</span>
+              <span className="text-sm text-muted-foreground">{t("common.enable")}</span>
               <Switch
                 checked={!credential.disabled}
                 onCheckedChange={handleToggleDisabled}
@@ -178,7 +180,7 @@ export function CredentialCard({
             {/* 只在优先填充模式下显示优先级 */}
             {isPriorityMode && (
               <div>
-                <span className="text-muted-foreground">优先级：</span>
+                <span className="text-muted-foreground">{t("credential.priority")}：</span>
                 {editingPriority ? (
                   <div className="inline-flex items-center gap-1 ml-1">
                     <Input
@@ -223,7 +225,7 @@ export function CredentialCard({
               </div>
             )}
             <div>
-              <span className="text-muted-foreground">失败次数：</span>
+              <span className="text-muted-foreground">{t("credential.failureCount")}：</span>
               <span
                 className={
                   credential.failureCount > 0 ? "text-red-500 font-medium" : ""
@@ -233,7 +235,7 @@ export function CredentialCard({
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground">认证方式：</span>
+              <span className="text-muted-foreground">{t("credential.authMethod")}：</span>
               <span className="font-medium">
                 {formatAuthMethodLabel(credential.authMethod)}
               </span>
@@ -358,7 +360,7 @@ export function CredentialCard({
               disabled={resetFailure.isPending || credential.failureCount === 0}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
-              重置失败
+              {t("credential.resetFailure")}
             </Button>
             {/* 只在优先填充模式下显示优先级调整按钮 */}
             {isPriorityMode && (
@@ -373,7 +375,7 @@ export function CredentialCard({
                       {
                         onSuccess: (res) => toast.success(res.message),
                         onError: (err) =>
-                          toast.error("操作失败: " + (err as Error).message),
+                          toast.error(t("credential.operationFailed") + ": " + (err as Error).message),
                       }
                     );
                   }}
@@ -392,7 +394,7 @@ export function CredentialCard({
                       {
                         onSuccess: (res) => toast.success(res.message),
                         onError: (err) =>
-                          toast.error("操作失败: " + (err as Error).message),
+                          toast.error(t("credential.operationFailed") + ": " + (err as Error).message),
                       }
                     );
                   }}
@@ -409,7 +411,7 @@ export function CredentialCard({
               onClick={() => onViewBalance(credential.id)}
             >
               <Wallet className="h-4 w-4 mr-1" />
-              查看余额
+              {t("credential.viewBalance")}
             </Button>
             <Button
               size="sm"
@@ -421,7 +423,7 @@ export function CredentialCard({
               }
             >
               <Trash2 className="h-4 w-4 mr-1" />
-              删除
+              {t("common.delete")}
             </Button>
           </div>
         </CardContent>
@@ -431,9 +433,9 @@ export function CredentialCard({
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>确认删除凭据</DialogTitle>
+            <DialogTitle>{t("credential.deleteCredential")}</DialogTitle>
             <DialogDescription>
-              您确定要删除凭据 #{credential.id} 吗？此操作无法撤销。
+              {t("credential.deleteConfirm")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -442,14 +444,14 @@ export function CredentialCard({
               onClick={() => setShowDeleteDialog(false)}
               disabled={deleteCredential.isPending}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
               onClick={handleDelete}
               disabled={deleteCredential.isPending}
             >
-              确认删除
+              {t("common.confirm")} {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,9 +72,10 @@ export function PoolItem({
   onTransferCredential,
   allPools = [],
 }: PoolItemProps) {
+  const { t } = useTranslation();
   const isDefault = pool.id === "default";
   const schedulingModeLabel =
-    pool.schedulingMode === "round_robin" ? "轮询" : "优先填充";
+    pool.schedulingMode === "round_robin" ? t("pool.schedulingModes.round_robin") : t("pool.schedulingModes.priority_fill");
   const SchedulingModeIcon =
     pool.schedulingMode === "round_robin" ? Shuffle : ArrowDownToLine;
 
@@ -99,14 +101,14 @@ export function PoolItem({
           setPoolCredentials(response.credentials);
           setCredentialsLoaded(true);
         } catch (err) {
-          toast.error(`加载凭证列表失败: ${(err as Error).message}`);
+          toast.error(`${t("credential.operationFailed")}: ${(err as Error).message}`);
         } finally {
           setLoadingCredentials(false);
         }
       };
       loadCredentials();
     }
-  }, [expanded, isDefault, credentialsLoaded, fetchPoolCredentials, pool.id]);
+  }, [expanded, isDefault, credentialsLoaded, fetchPoolCredentials, pool.id, t]);
 
   // 当池折叠时，重置加载状态（下次展开时重新加载）
   useEffect(() => {
@@ -122,7 +124,7 @@ export function PoolItem({
     setTransferringId(credentialId); // 开始转移时才设置
     try {
       await onTransferCredential(credentialId, selectedTargetPool);
-      toast.success(`凭证 #${credentialId} 已转移到池 ${selectedTargetPool}`);
+      toast.success(`${t("credential.transferSuccess")} #${credentialId} ${t("credential.transferTo")} ${selectedTargetPool}`);
 
       // 非默认池：直接从本地状态移除已转移的凭证
       // 默认池：父组件会通过 refetchCredentials 刷新 credentials prop
@@ -132,7 +134,7 @@ export function PoolItem({
       setSelectedTargetPool("");
       setSelectedCredentialId(null);
     } catch (err) {
-      toast.error(`转移失败: ${(err as Error).message}`);
+      toast.error(`${t("credential.transferFailed")}: ${(err as Error).message}`);
     } finally {
       setTransferringId(null);
     }
@@ -181,7 +183,7 @@ export function PoolItem({
               )}
               {!pool.enabled && (
                 <Badge variant="destructive" className="text-xs">
-                  已禁用
+                  {t("pool.disabled")}
                 </Badge>
               )}
             </div>
@@ -192,7 +194,7 @@ export function PoolItem({
               </span>
               <span className="flex items-center gap-1.5">
                 <Key className="h-3 w-3" />
-                {pool.availableCredentials}/{pool.totalCredentials} 可用
+                {pool.availableCredentials}/{pool.totalCredentials} {t("credential.available")}
               </span>
               {pool.hasProxy && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
@@ -220,7 +222,7 @@ export function PoolItem({
             className="rounded-lg"
             onClick={onEdit}
           >
-            编辑
+            {t("common.edit")}
           </Button>
           {!isDefault && (
             <Button
@@ -229,7 +231,7 @@ export function PoolItem({
               className="rounded-lg"
               onClick={() => onToggleEnabled(!pool.enabled)}
             >
-              {pool.enabled ? "禁用" : "启用"}
+              {pool.enabled ? t("common.disable") : t("common.enable")}
             </Button>
           )}
           {!isDefault && pool.totalCredentials === 0 && (
@@ -239,7 +241,7 @@ export function PoolItem({
               className="rounded-lg text-destructive hover:text-destructive"
               onClick={onDelete}
             >
-              删除
+              {t("common.delete")}
             </Button>
           )}
         </div>
@@ -251,7 +253,7 @@ export function PoolItem({
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">凭据列表</span>
+              <span className="text-sm font-medium">{t("pool.credentials")}</span>
               <Badge variant="secondary" className="text-xs">
                 {displayCredentials.length} 个
               </Badge>
@@ -265,7 +267,7 @@ export function PoolItem({
                 className="rounded-lg"
               >
                 <Upload className="h-4 w-4 mr-1.5" />
-                导入
+                {t("pool.importCredentials")}
               </Button>
               {isDefault && (
                 <Button
@@ -274,7 +276,7 @@ export function PoolItem({
                   className="rounded-lg bg-primary hover:bg-primary/90"
                 >
                   <Plus className="h-4 w-4 mr-1.5" />
-                  添加
+                  {t("pool.addCredential")}
                 </Button>
               )}
             </div>
@@ -285,7 +287,7 @@ export function PoolItem({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               <span className="ml-2 text-muted-foreground">
-                加载凭证列表...
+                {t("common.loading")}
               </span>
             </div>
           )}
@@ -296,10 +298,10 @@ export function PoolItem({
               {displayCredentials.length === 0 ? (
                 <div className="text-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/20">
                   <Key className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
-                  <p className="text-muted-foreground mb-1">暂无凭据</p>
+                  <p className="text-muted-foreground mb-1">{t("pool.noCredentials")}</p>
                   <p className="text-sm text-muted-foreground/70">
                     {isDefault
-                      ? '点击"添加"或"导入"添加凭据'
+                      ? t("pool.addFirstCredential")
                       : "将凭据从其他池转移到此池"}
                   </p>
                 </div>
@@ -329,7 +331,7 @@ export function PoolItem({
                             disabled={transferringId === credential.id}
                           >
                             <SelectTrigger className="h-8 text-xs flex-1">
-                              <SelectValue placeholder="转移到..." />
+                              <SelectValue placeholder={t("credential.transferTo") + "..."} />
                             </SelectTrigger>
                             <SelectContent>
                               {targetPools.map((p) => (
@@ -353,7 +355,7 @@ export function PoolItem({
                             {transferringId === credential.id ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
-                              "转移"
+                              t("credential.transfer")
                             )}
                           </Button>
                         </div>
@@ -376,20 +378,20 @@ export function PoolItem({
                     <div className="text-2xl font-bold">
                       {pool.totalCredentials}
                     </div>
-                    <div className="text-xs text-muted-foreground">总凭据</div>
+                    <div className="text-xs text-muted-foreground">{t("pool.credentials")}</div>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-background shadow-sm">
                     <div className="text-2xl font-bold text-green-600">
                       {pool.availableCredentials}
                     </div>
-                    <div className="text-xs text-muted-foreground">可用</div>
+                    <div className="text-xs text-muted-foreground">{t("credential.available")}</div>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-background shadow-sm">
                     <div className="text-2xl font-bold text-primary">
                       {pool.sessionCacheSize}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      会话缓存
+                      {t("pool.sessionCache")}
                     </div>
                   </div>
                 </div>

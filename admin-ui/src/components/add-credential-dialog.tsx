@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ interface AddCredentialDialogProps {
 type AuthMethod = 'social' | 'idc'
 
 export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogProps) {
+  const { t } = useTranslation()
   const [refreshToken, setRefreshToken] = useState('')
   const [authMethod, setAuthMethod] = useState<AuthMethod>('social')
   const [region, setRegion] = useState('')
@@ -64,7 +66,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
 
     // 验证必填字段
     if (!refreshToken.trim()) {
-      toast.error('请输入 Refresh Token')
+      toast.error(t('addCredential.sessionTokenPlaceholder'))
       return
     }
 
@@ -100,7 +102,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
           resetForm()
         },
         onError: (error: unknown) => {
-          toast.error(`添加失败: ${extractErrorMessage(error)}`)
+          toast.error(`${t('addCredential.addFailed')}: ${extractErrorMessage(error)}`)
         },
       }
     )
@@ -110,7 +112,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>添加凭据</DialogTitle>
+          <DialogTitle>{t('addCredential.title')}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
@@ -123,7 +125,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               <Input
                 id="refreshToken"
                 type="password"
-                placeholder="请输入 Refresh Token"
+                placeholder={t('addCredential.sessionTokenPlaceholder')}
                 value={refreshToken}
                 onChange={(e) => setRefreshToken(e.target.value)}
                 disabled={isPending}
@@ -133,7 +135,7 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
             {/* 认证方式 */}
             <div className="space-y-2">
               <label htmlFor="authMethod" className="text-sm font-medium">
-                认证方式
+                {t('addCredential.authMethod')}
               </label>
               <select
                 id="authMethod"
@@ -149,10 +151,10 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
 
             {/* 目标池选择 */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">目标池</label>
+              <label className="text-sm font-medium">{t('addCredential.poolId')}</label>
               <Select value={poolId} onValueChange={setPoolId} disabled={isPending}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择目标池" />
+                  <SelectValue placeholder={t('addCredential.poolIdPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">默认池 (default)</SelectItem>
@@ -214,13 +216,13 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
             {/* 优先级 */}
             <div className="space-y-2">
               <label htmlFor="priority" className="text-sm font-medium">
-                优先级
+                {t('addCredential.priority')}
               </label>
               <Input
                 id="priority"
                 type="number"
                 min="0"
-                placeholder="数字越小优先级越高"
+                placeholder={t('addCredential.priorityPlaceholder')}
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
                 disabled={isPending}
@@ -251,11 +253,11 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                   </p>
                   <div className="space-y-2">
                     <label htmlFor="proxyUrl" className="text-sm font-medium">
-                      代理地址
+                      {t('pool.proxyUrl')}
                     </label>
                     <Input
                       id="proxyUrl"
-                      placeholder="例如 socks5://127.0.0.1:1080"
+                      placeholder={t('pool.proxyUrlPlaceholder')}
                       value={proxyUrl}
                       onChange={(e) => setProxyUrl(e.target.value)}
                       disabled={isPending}
@@ -264,11 +266,11 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <label htmlFor="proxyUsername" className="text-sm font-medium">
-                        用户名
+                        {t('pool.proxyUsername')}
                       </label>
                       <Input
                         id="proxyUsername"
-                        placeholder="可选"
+                        placeholder={t('pool.proxyUsernamePlaceholder')}
                         value={proxyUsername}
                         onChange={(e) => setProxyUsername(e.target.value)}
                         disabled={isPending}
@@ -276,12 +278,12 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="proxyPassword" className="text-sm font-medium">
-                        密码
+                        {t('pool.proxyPassword')}
                       </label>
                       <Input
                         id="proxyPassword"
                         type="password"
-                        placeholder="可选"
+                        placeholder={t('pool.proxyPasswordPlaceholder')}
                         value={proxyPassword}
                         onChange={(e) => setProxyPassword(e.target.value)}
                         disabled={isPending}
@@ -300,10 +302,10 @@ export function AddCredentialDialog({ open, onOpenChange }: AddCredentialDialogP
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? '添加中...' : '添加'}
+              {isPending ? t('common.loading') : t('addCredential.addButton')}
             </Button>
           </DialogFooter>
         </form>

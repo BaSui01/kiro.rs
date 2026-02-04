@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Upload, FileJson, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ interface ImportCredentialsDialogProps {
 }
 
 export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'default' }: ImportCredentialsDialogProps) {
+  const { t } = useTranslation()
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [parsedCredentials, setParsedCredentials] = useState<IdcCredentialItem[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
@@ -51,16 +53,16 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
     onSuccess: (data) => {
       setImportResult(data)
       if (data.importedCount > 0) {
-        toast.success(`成功导入 ${data.importedCount} 个凭据`)
+        toast.success(t('importCredentials.importSuccess', { count: data.importedCount }))
         queryClient.invalidateQueries({ queryKey: ['credentials'] })
         queryClient.invalidateQueries({ queryKey: ['pools'] })
       }
       if (data.skippedCount > 0) {
-        toast.warning(`跳过 ${data.skippedCount} 个无效凭据`)
+        toast.warning(t('importCredentials.skippedInvalid', { count: data.skippedCount }))
       }
     },
     onError: (error: Error) => {
-      toast.error(`导入失败: ${error.message}`)
+      toast.error(`${t('importCredentials.importFailed')}: ${error.message}`)
     },
   })
 
@@ -130,7 +132,7 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
           }
         }
       } catch (err) {
-        setParseError(`解析文件 ${file.name} 失败: ${(err as Error).message}`)
+        setParseError(t('importCredentials.parseFileFailed', { fileName: file.name, error: (err as Error).message }))
         return
       }
     }
@@ -140,7 +142,7 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
 
   const handleImport = () => {
     if (parsedCredentials.length === 0) {
-      toast.error('没有可导入的凭据')
+      toast.error(t('importCredentials.noFileSelected'))
       return
     }
 
@@ -173,7 +175,7 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
     )
 
     if (files.length === 0) {
-      toast.error('请拖放 JSON 文件')
+      toast.error(t('importCredentials.dropJsonFile'))
       return
     }
 
@@ -192,23 +194,23 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            导入凭据
+            {t('importCredentials.title')}
           </DialogTitle>
           <DialogDescription>
-            支持从 Kiro Account Manager 导出的 JSON 文件导入凭据（IdC/Builder-ID/IAM 格式）
+            {t('importCredentials.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* 目标池选择 */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">导入到池</label>
+            <label className="text-sm font-medium">{t('importCredentials.poolId')}</label>
             <Select value={selectedPoolId} onValueChange={setSelectedPoolId}>
               <SelectTrigger>
-                <SelectValue placeholder="选择目标池" />
+                <SelectValue placeholder={t('importCredentials.poolIdPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="default">默认池 (default)</SelectItem>
+                <SelectItem value="default">{t('importCredentials.defaultPool')}</SelectItem>
                 {pools
                   .filter((p) => p.id !== 'default')
                   .map((pool) => (
@@ -219,7 +221,7 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              选择要将凭据导入到哪个池
+              {t('importCredentials.importToPool')}
             </p>
           </div>
 
@@ -240,17 +242,17 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
             />
             <FileJson className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              点击选择或拖放 JSON 文件
+              {t('importCredentials.clickOrDrop')}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              支持多文件选择
+              {t('importCredentials.multipleFilesSupported')}
             </p>
           </div>
 
           {/* 已选择的文件 */}
           {selectedFiles.length > 0 && (
             <div className="text-sm">
-              <p className="font-medium mb-1">已选择 {selectedFiles.length} 个文件:</p>
+              <p className="font-medium mb-1">{t('importCredentials.filesSelected', { count: selectedFiles.length })}</p>
               <ul className="text-muted-foreground space-y-1">
                 {selectedFiles.map((f, i) => (
                   <li key={i} className="truncate">• {f.name}</li>
@@ -271,18 +273,18 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
           {parsedCredentials.length > 0 && !parseError && (
             <div className="p-3 bg-muted rounded-lg">
               <p className="text-sm font-medium mb-2">
-                解析到 {parsedCredentials.length} 个凭据:
+                {t('importCredentials.credentialsParsed', { count: parsedCredentials.length })}
               </p>
               <ul className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto">
                 {parsedCredentials.slice(0, 10).map((cred, i) => (
                   <li key={i} className="truncate">
-                    • {cred.label || cred.email || `凭据 ${i + 1}`}
+                    • {cred.label || cred.email || t('importCredentials.credentialN', { n: i + 1 })}
                     {cred.clientId ? ' (IdC)' : ' (Social)'}
                   </li>
                 ))}
                 {parsedCredentials.length > 10 && (
                   <li className="text-muted-foreground">
-                    ... 还有 {parsedCredentials.length - 10} 个
+                    {t('importCredentials.moreCredentials', { count: parsedCredentials.length - 10 })}
                   </li>
                 )}
               </ul>
@@ -302,7 +304,7 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
               </div>
               {importResult.skippedItems.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium mb-1">跳过的凭据:</p>
+                  <p className="text-xs font-medium mb-1">{t('importCredentials.skippedCredentials')}</p>
                   <ul className="text-xs space-y-0.5 max-h-24 overflow-y-auto">
                     {importResult.skippedItems.map((item, i) => (
                       <li key={i} className="truncate">• {item}</li>
@@ -316,14 +318,14 @@ export function ImportCredentialsDialog({ open, onOpenChange, defaultPoolId = 'd
           {/* 操作按钮 */}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={handleClose}>
-              {importResult ? '关闭' : '取消'}
+              {importResult ? t('common.close') : t('common.cancel')}
             </Button>
             {!importResult && (
               <Button
                 onClick={handleImport}
                 disabled={parsedCredentials.length === 0 || importMutation.isPending}
               >
-                {importMutation.isPending ? '导入中...' : `导入 ${parsedCredentials.length} 个凭据`}
+                {importMutation.isPending ? t('importCredentials.importing') : `${t('importCredentials.importButton')} ${parsedCredentials.length} ${t('importCredentials.credentialsUnit')}`}
               </Button>
             )}
           </div>
