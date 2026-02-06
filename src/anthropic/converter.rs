@@ -12,7 +12,7 @@ use crate::kiro::model::requests::tool::{
     InputSchema, Tool, ToolResult, ToolSpecification, ToolUseEntry,
 };
 
-use super::types::{ContentBlock, MessagesRequest, Thinking};
+use super::types::{ContentBlock, MessagesRequest};
 
 /// 模型映射：将 Anthropic 模型名映射到 Kiro 模型 ID
 ///
@@ -26,7 +26,11 @@ pub fn map_model(model: &str) -> Option<String> {
     if model_lower.contains("sonnet") {
         Some("claude-sonnet-4.5".to_string())
     } else if model_lower.contains("opus") {
-        Some("claude-opus-4.5".to_string())
+        if model_lower.contains("4-5") || model_lower.contains("4.5") {
+            Some("claude-opus-4.5".to_string())
+        } else {
+            Some("claude-opus-4.6".to_string())
+        }
     } else if model_lower.contains("haiku") {
         Some("claude-haiku-4.5".to_string())
     } else {
@@ -406,12 +410,22 @@ fn convert_tools(tools: &Option<Vec<super::types::Tool>>) -> Vec<Tool> {
 }
 
 /// 生成thinking标签前缀
-fn generate_thinking_prefix(thinking: &Option<Thinking>) -> Option<String> {
-    if let Some(t) = thinking {
+fn generate_thinking_prefix(req: &MessagesRequest) -> Option<String> {
+    if let Some(t) = &req.thinking {
         if t.thinking_type == "enabled" {
             return Some(format!(
                 "<thinking_mode>enabled</thinking_mode><max_thinking_length>{}</max_thinking_length>",
                 t.budget_tokens
+            ));
+        } else if t.thinking_type == "adaptive" {
+            let effort = req
+                .output_config
+                .as_ref()
+                .map(|c| c.effort.as_str())
+                .unwrap_or("high");
+            return Some(format!(
+                "<thinking_mode>adaptive</thinking_mode><thinking_effort>{}</thinking_effort>",
+                effort
             ));
         }
     }
@@ -428,7 +442,7 @@ fn build_history(req: &MessagesRequest, model_id: &str) -> Result<Vec<Message>, 
     let mut history = Vec::new();
 
     // 生成thinking前缀（如果需要）
-    let thinking_prefix = generate_thinking_prefix(&req.thinking);
+    let thinking_prefix = generate_thinking_prefix(req);
 
     // 1. 处理系统消息
     if let Some(ref system) = req.system {
@@ -676,6 +690,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
         assert_eq!(determine_chat_trigger_type(&req), "MANUAL");
@@ -754,6 +769,7 @@ mod tests {
             tools: None, // 没有提供工具定义
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 
@@ -818,6 +834,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: Some(Metadata {
                 user_id: Some(
                     "user_0dede55c6dcc4a11a30bbb5e7f22e6fdf86cdeba3820019cc27612af4e1243cd_account__session_a0662283-7fd3-4399-a7eb-52b9a717ae88".to_string(),
@@ -849,6 +866,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 

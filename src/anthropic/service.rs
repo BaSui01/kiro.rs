@@ -218,6 +218,7 @@ fn apply_history_management(
         tools: payload.tools.clone(),
         tool_choice: payload.tool_choice.clone(),
         thinking: payload.thinking.clone(),
+        output_config: payload.output_config.clone(),
         metadata: payload.metadata.clone(),
     }
 }
